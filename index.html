@@ -36,7 +36,24 @@
           <input id="password" type="password" autocomplete="current-password" required placeholder="輸入密碼">
         </label>
         <button class="btn btn-primary" type="submit">登入</button>
+        <button id="forgotPasswordBtn" class="btn btn-secondary" type="button">忘記密碼／寄送重設連結</button>
+        <p class="hint">請先輸入電子郵件，再點選忘記密碼。系統會寄送重設連結。</p>
         <p id="loginMessage" class="message" role="status"></p>
+      </form>
+    </section>
+
+    <section id="passwordResetPanel" class="panel login-panel hidden">
+      <h2>設定新密碼</h2>
+      <p class="muted">請設定新的登入密碼。完成後，系統會回到登入畫面。</p>
+      <form id="passwordResetForm" class="stack">
+        <label>新密碼
+          <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="至少 8 個字元">
+        </label>
+        <label>再次輸入新密碼
+          <input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="再次輸入新密碼">
+        </label>
+        <button id="updatePasswordBtn" class="btn btn-primary" type="submit">更新密碼</button>
+        <p id="resetPasswordMessage" class="message" role="status"></p>
       </form>
     </section>
 
@@ -53,6 +70,7 @@
         <button class="tab active" data-tab="entry" type="button">新增施工</button>
         <button class="tab" data-tab="records" type="button">施工紀錄</button>
         <button class="tab" data-tab="stats" type="button">數量統計</button>
+        <button id="catalogTabBtn" class="tab hidden" data-tab="catalog" type="button">品項管理</button>
       </nav>
 
       <section id="tab-entry" class="panel tab-panel">
@@ -132,6 +150,33 @@
           </div>
           <p id="entryMessage" class="message" role="status"></p>
         </form>
+      </section>
+
+
+      <section id="tab-catalog" class="panel tab-panel hidden">
+        <div class="section-heading"><h2>共用設備品項管理</h2><button id="catalogRefreshBtn" class="btn btn-secondary" type="button">重新整理</button></div>
+        <p class="muted small">只有主管可以新增、修改或停用品項。停用不會刪除既有施工紀錄。</p>
+        <form id="catalogForm" class="stack">
+          <input id="catalogId" type="hidden">
+          <div class="form-grid">
+            <label>設備類別
+              <select id="catalogCategory" required>
+                <option>火警自動警報設備</option><option>滅火設備</option><option>避難逃生設備</option><option>消防箱與配件</option><option>施工與維修材料</option><option>其他設備</option>
+              </select>
+            </label>
+            <label>品項名稱<input id="catalogName" required maxlength="120" placeholder="例如：偵煙式探測器"></label>
+          </div>
+          <label>規格（用逗號分隔）<input id="catalogSpecs" placeholder="例如：一般型, 小型, 其他／未分類"></label>
+          <div class="form-grid">
+            <label>單位<input id="catalogUnit" required maxlength="20" placeholder="顆、具、支、台"></label>
+            <label>排序<input id="catalogSort" type="number" step="1" value="100"></label>
+          </div>
+          <label class="inline-check"><input id="catalogActive" type="checkbox" checked> 啟用此品項</label>
+          <div class="button-row"><button id="catalogSaveBtn" class="btn btn-primary" type="submit">新增品項</button><button id="catalogResetBtn" class="btn btn-secondary" type="button">清除／取消編輯</button></div>
+          <p id="catalogMessage" class="message" role="status"></p>
+        </form>
+        <h3>現有共用品項</h3>
+        <div class="table-wrap"><table><thead><tr><th>設備類別</th><th>品項名稱</th><th>規格</th><th>單位</th><th>狀態</th><th>操作</th></tr></thead><tbody id="catalogList"><tr><td colspan="6">載入中…</td></tr></tbody></table></div>
       </section>
 
       <section id="tab-records" class="panel tab-panel hidden">
