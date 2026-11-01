@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#123b35">
+  <meta name="description" content="永鴻消防器材行每日施工報表">
+  <title>永鴻消防｜每日施工報表</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-mark">永</div>
+    <div>
+      <h1>永鴻消防</h1>
+      <p>每日施工報表</p>
+    </div>
+    <button id="logoutBtn" class="btn btn-quiet hidden" type="button">登出</button>
+  </header>
+
+  <main class="container">
+    <section id="configNotice" class="notice notice-warn hidden">
+      <strong>尚未完成設定</strong>
+      <p>請先在 <code>app.js</code> 填入 Supabase Project URL 與 anon/publishable key，再依照 README 設定資料庫。</p>
+    </section>
+
+    <section id="loginPanel" class="panel login-panel">
+      <h2>員工登入</h2>
+      <p class="muted">請使用公司管理者建立的帳號登入。此頁面不提供公開註冊。</p>
+      <form id="loginForm" class="stack">
+        <label>電子郵件
+          <input id="email" type="email" autocomplete="username" required placeholder="name@example.com">
+        </label>
+        <label>密碼
+          <input id="password" type="password" autocomplete="current-password" required placeholder="輸入密碼">
+        </label>
+        <button class="btn btn-primary" type="submit">登入</button>
+        <p id="loginMessage" class="message" role="status"></p>
+      </form>
+    </section>
+
+    <section id="appPanel" class="hidden">
+      <div class="welcome-row">
+        <div>
+          <h2 id="welcomeTitle">施工工作台</h2>
+          <p id="userSummary" class="muted"></p>
+        </div>
+        <span id="roleBadge" class="role-badge">施工人員</span>
+      </div>
+
+      <nav class="tabs" aria-label="主要功能">
+        <button class="tab active" data-tab="entry" type="button">新增施工</button>
+        <button class="tab" data-tab="records" type="button">施工紀錄</button>
+        <button class="tab" data-tab="stats" type="button">數量統計</button>
+      </nav>
+
+      <section id="tab-entry" class="panel tab-panel">
+        <div class="section-heading">
+          <h2 id="formTitle">新增施工紀錄</h2>
+          <span class="muted small">一筆設備／施工項目一列</span>
+        </div>
+        <form id="entryForm" class="stack">
+          <input id="entryId" type="hidden">
+          <div class="form-grid">
+            <label>施工日期
+              <input id="workDate" type="date" required>
+            </label>
+            <label>施工場所
+              <input id="siteName" type="text" maxlength="160" required placeholder="例如：成功大學機械系">
+            </label>
+          </div>
+          <label>場所地址（選填）
+            <input id="siteAddress" type="text" maxlength="240" placeholder="輸入地址或校區">
+          </label>
+          <div class="form-grid">
+            <label>樓層／區域（選填）
+              <input id="floorArea" type="text" maxlength="120" placeholder="例如：三樓、東側走廊">
+            </label>
+            <label>設備類別
+              <select id="equipmentName" required></select>
+            </label>
+          </div>
+          <div class="form-grid">
+            <label>設備規格
+              <select id="equipmentSpec"></select>
+              <span id="specHelp" class="hint">依設備類別選擇適用規格</span>
+            </label>
+            <label>施工方式
+              <select id="workType" required>
+                <option value="移置">移置</option>
+                <option value="新設">新設</option>
+                <option value="更換">更換</option>
+                <option value="維修">維修</option>
+                <option value="拆除">拆除</option>
+                <option value="測試">測試</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-grid">
+            <label>數量
+              <input id="quantity" type="number" min="0.01" step="0.01" required value="1">
+            </label>
+            <label>計量單位
+              <input id="unit" type="text" maxlength="20" required value="具" placeholder="具、顆、只、組">
+            </label>
+          </div>
+          <div class="form-grid">
+            <label>施工狀態
+              <select id="status">
+                <option value="已完工">已完工</option>
+                <option value="施工中">施工中</option>
+                <option value="待處理">待處理</option>
+              </select>
+            </label>
+            <label>點位／編號（選填）
+              <input id="pointName" type="text" maxlength="120" placeholder="例如：3F-東側-01">
+            </label>
+          </div>
+          <label>施工照片（選填，可多選）
+            <input id="photoFiles" type="file" accept="image/*" capture="environment" multiple>
+            <span class="hint">可拍照或從相簿選取。每張照片上限 8 MB，照片會上傳至私人雲端儲存空間。</span>
+          </label>
+          <div id="photoPreview" class="photo-preview"></div>
+          <div id="existingPhotos" class="photo-preview"></div>
+          <label>備註（選填）
+            <textarea id="notes" rows="3" maxlength="1500" placeholder="故障情形、材料型號、施工補充說明"></textarea>
+          </label>
+          <div class="button-row">
+            <button id="saveBtn" class="btn btn-primary" type="submit">儲存施工紀錄</button>
+            <button id="cancelEditBtn" class="btn btn-secondary hidden" type="button">取消修改</button>
+          </div>
+          <p id="entryMessage" class="message" role="status"></p>
+        </form>
+      </section>
+
+      <section id="tab-records" class="panel tab-panel hidden">
+        <div class="section-heading">
+          <h2>施工紀錄</h2>
+          <button id="refreshBtn" class="btn btn-secondary" type="button">重新整理</button>
+        </div>
+        <div class="filter-grid">
+          <label>起始日期<input id="filterFrom" type="date"></label>
+          <label>結束日期<input id="filterTo" type="date"></label>
+          <label>場所關鍵字<input id="filterSite" type="search" placeholder="搜尋場所"></label>
+          <label>施工方式
+            <select id="filterWorkType">
+              <option value="">全部方式</option>
+              <option>移置</option><option>新設</option><option>更換</option>
+              <option>維修</option><option>拆除</option><option>測試</option>
+            </select>
+          </label>
+          <label>施工狀態
+            <select id="filterStatus">
+              <option value="">全部狀態</option><option>已完工</option><option>施工中</option><option>待處理</option>
+            </select>
+          </label>
+        </div>
+        <div class="button-row filter-actions">
+          <button id="applyFiltersBtn" class="btn btn-primary" type="button">套用篩選</button>
+          <button id="clearFiltersBtn" class="btn btn-secondary" type="button">清除條件</button>
+          <button id="exportCsvBtn" class="btn btn-secondary" type="button">匯出 CSV</button>
+        </div>
+        <p id="recordsSummary" class="muted small"></p>
+        <div id="recordsList" class="records-list"><p class="muted">登入後載入紀錄。</p></div>
+      </section>
+
+      <section id="tab-stats" class="panel tab-panel hidden">
+        <div class="section-heading">
+          <h2>數量統計</h2>
+          <button id="statsBtn" class="btn btn-secondary" type="button">更新統計</button>
+        </div>
+        <div class="filter-grid">
+          <label>起始日期<input id="statsFrom" type="date"></label>
+          <label>結束日期<input id="statsTo" type="date"></label>
+        </div>
+        <p class="muted small">統計依目前登入者可讀取的資料計算。施工人員只會看到自己的紀錄；主管可查看全公司紀錄。</p>
+        <div id="statsSummary" class="stats-cards"></div>
+        <h3>依設備與施工方式統計</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>設備類別</th><th>規格</th><th>施工方式</th><th>數量</th><th>單位</th></tr></thead>
+            <tbody id="statsTable"><tr><td colspan="5">尚無統計資料</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+    <footer class="footer">永鴻消防器材行｜每日施工報表系統 <span id="connectionStatus">尚未連線</span></footer>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
