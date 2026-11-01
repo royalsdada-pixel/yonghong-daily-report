@@ -2,8 +2,8 @@
  * 前端只可使用 Supabase Project URL + anon/publishable key。
  * 絕不可放入 service_role / secret key。
  */
-const SUPABASE_URL = "請填入你的_SUPABASE_PROJECT_URL";
-const SUPABASE_ANON_KEY = "請填入你的_SUPABASE_ANON_OR_PUBLISHABLE_KEY";
+const SUPABASE_URL = "https://mupbbqsizvioywweirnz.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_SMP0YsMXN51AkSBxhmAl6w_7V-pXPaG";
 
 const defaultEquipment = [
   { name: "緊急照明燈", specs: ["小型", "中型", "大型"], unit: "具" },
