@@ -20,16 +20,12 @@ const defaultEquipment = [
   { name: "其他設備", specs: ["其他／未分類"], unit: "個" }
 ];
 
-let supabase = null;
+let supabaseClient = null;
 let currentUser = null;
 let currentProfile = null;
 let equipmentCatalog = [];
 let cachedEntries = [];
 let editingId = null;
-let existingPhotoPaths = [];
-let selectedPhotoFiles = [];
-const PHOTO_BUCKET = "work-photos";
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
 const $ = (id) => document.getElementById(id);
 const today = () => {
@@ -84,7 +80,7 @@ function updateSpecOptions() {
 }
 
 async function loadEquipmentCatalog() {
-  const { data, error } = await supabase.from("equipment_catalog")
+  const { data, error } = await supabaseClient.from("equipment_catalog")
     .select("name,specs,unit,active").eq("active", true).order("sort_order").order("name");
   if (error) {
     console.warn("設備目錄讀取失敗，暫用內建選項：", error.message);
@@ -96,7 +92,7 @@ async function loadEquipmentCatalog() {
 }
 
 async function loadProfile(user) {
-  const { data, error } = await supabase.from("profiles").select("display_name,role").eq("id", user.id).single();
+  const { data, error } = await supabaseClient.from("profiles").select("display_name,role").eq("id", user.id).single();
   if (error) throw new Error("讀取使用者權限失敗。請確認已執行 schema.sql，且帳號已建立 profile。");
   currentProfile = data;
   $("userSummary").textContent = `${data.display_name || user.email} · ${user.email}`;
@@ -133,7 +129,7 @@ async function onSession(session) {
 async function login(event) {
   event.preventDefault();
   setMessage("loginMessage", "登入中…");
-  const { error } = await supabase.auth.signInWithPassword({
+  const { error } = await supabaseClient.auth.signInWithPassword({
     email: $("email").value.trim(),
     password: $("password").value
   });
@@ -141,7 +137,7 @@ async function login(event) {
   else setMessage("loginMessage", "登入成功。", "success");
 }
 async function logout() {
-  const { error } = await supabase.auth.signOut();
+  const { error } = await supabaseClient.auth.signOut();
   if (error) alert(`登出失敗：${error.message}`);
   else {
     setLoggedInUI(false);
@@ -149,66 +145,8 @@ async function logout() {
   }
 }
 
-function safeFileName(name) {
-  const cleaned = String(name || "photo").normalize("NFKC").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-90);
-  return cleaned || "photo";
-}
-function renderLocalPhotoPreview() {
-  const preview = $("photoPreview");
-  preview.innerHTML = "";
-  selectedPhotoFiles.forEach((file, index) => {
-    const url = URL.createObjectURL(file);
-    const item = document.createElement("div");
-    item.className = "photo-item";
-    item.innerHTML = `<img alt="待上傳施工照片"><button class="photo-remove" type="button" aria-label="移除照片">×</button><div class="photo-caption"></div>`;
-    item.querySelector("img").src = url;
-    item.querySelector(".photo-caption").textContent = file.name;
-    item.querySelector("button").addEventListener("click", () => {
-      URL.revokeObjectURL(url);
-      selectedPhotoFiles.splice(index, 1);
-      renderLocalPhotoPreview();
-    });
-    preview.appendChild(item);
-  });
-}
-async function renderExistingPhotos(paths) {
-  const container = $("existingPhotos");
-  container.innerHTML = "";
-  if (!paths?.length || !supabase) return;
-  const heading = document.createElement("div");
-  heading.className = "muted small";
-  heading.textContent = "已儲存的施工照片";
-  container.appendChild(heading);
-  for (const path of paths) {
-    const { data, error } = await supabase.storage.from(PHOTO_BUCKET).createSignedUrl(path, 3600);
-    if (error || !data?.signedUrl) continue;
-    const wrap = document.createElement("div"); wrap.className = "photo-item";
-    const link = document.createElement("a"); link.href = data.signedUrl; link.target = "_blank"; link.rel = "noopener noreferrer";
-    const img = document.createElement("img"); img.src = data.signedUrl; img.alt = "施工照片"; link.appendChild(img); wrap.appendChild(link);
-    const caption = document.createElement("div"); caption.className = "photo-caption"; caption.textContent = "已上傳"; wrap.appendChild(caption);
-    container.appendChild(wrap);
-  }
-}
-async function uploadSelectedPhotos(entryId) {
-  const uploaded = [];
-  for (const file of selectedPhotoFiles) {
-    if (!file.type.startsWith("image/")) throw new Error(`「${file.name}」不是圖片檔。`);
-    if (file.size > MAX_PHOTO_BYTES) throw new Error(`「${file.name}」超過 8 MB，請先縮小照片。`);
-    const path = `${currentUser.id}/${entryId}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
-    const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { cacheControl: "3600", upsert: false, contentType: file.type });
-    if (error) throw new Error(`照片上傳失敗（${file.name}）：${error.message}`);
-    uploaded.push(path);
-  }
-  return uploaded;
-}
-
 function resetForm() {
   editingId = null;
-  existingPhotoPaths = [];
-  selectedPhotoFiles = [];
-  $("photoFiles").value = "";
-  $("photoPreview").innerHTML = "";
-  $("existingPhotos").innerHTML = "";
   $("entryId").value = "";
   $("entryForm").reset();
   $("workDate").value = today();
@@ -246,11 +184,6 @@ function startEdit(entry) {
   $("status").value = entry.status;
   $("pointName").value = entry.point_name || "";
   $("notes").value = entry.notes || "";
-  existingPhotoPaths = Array.isArray(entry.photo_paths) ? [...entry.photo_paths] : [];
-  selectedPhotoFiles = [];
-  $("photoFiles").value = "";
-  $("photoPreview").innerHTML = "";
-  renderExistingPhotos(existingPhotoPaths);
   $("formTitle").textContent = "修改施工紀錄";
   $("saveBtn").textContent = "儲存修改";
   $("cancelEditBtn").classList.remove("hidden");
@@ -263,45 +196,39 @@ async function saveEntry(event) {
   event.preventDefault();
   if (!currentUser) return;
   const payload = {
-    work_date: $("workDate").value, site_name: $("siteName").value.trim(),
-    site_address: $("siteAddress").value.trim() || null, floor_area: $("floorArea").value.trim() || null,
-    equipment_name: $("equipmentName").value, equipment_spec: $("equipmentSpec").value || null,
-    work_type: $("workType").value, quantity: Number($("quantity").value), unit: $("unit").value.trim(),
-    status: $("status").value, point_name: $("pointName").value.trim() || null, notes: $("notes").value.trim() || null
+    work_date: $("workDate").value,
+    site_name: $("siteName").value.trim(),
+    site_address: $("siteAddress").value.trim() || null,
+    floor_area: $("floorArea").value.trim() || null,
+    equipment_name: $("equipmentName").value,
+    equipment_spec: $("equipmentSpec").value || null,
+    work_type: $("workType").value,
+    quantity: Number($("quantity").value),
+    unit: $("unit").value.trim(),
+    status: $("status").value,
+    point_name: $("pointName").value.trim() || null,
+    notes: $("notes").value.trim() || null
   };
   if (!payload.site_name || !payload.equipment_name || !payload.work_date || !(payload.quantity > 0) || !payload.unit) {
-    setMessage("entryMessage", "請確認日期、場所、設備、正確數量及單位。", "error"); return;
+    setMessage("entryMessage", "請確認日期、場所、設備、正確數量及單位。", "error");
+    return;
   }
   $("saveBtn").disabled = true;
-  setMessage("entryMessage", "正在儲存施工紀錄…");
-  let entryId = editingId;
+  setMessage("entryMessage", "正在儲存至雲端…");
   let result;
-  if (editingId) result = await supabase.from("work_entries").update(payload).eq("id", editingId).select("id").single();
-  else {
-    result = await supabase.from("work_entries").insert({ ...payload, created_by: currentUser.id }).select("id").single();
-    entryId = result.data?.id || null;
+  if (editingId) {
+    result = await supabaseClient.from("work_entries").update(payload).eq("id", editingId).select("id").single();
+  } else {
+    result = await supabaseClient.from("work_entries").insert({ ...payload, created_by: currentUser.id }).select("id").single();
   }
-  if (result.error || !entryId) {
-    $("saveBtn").disabled = false;
-    setMessage("entryMessage", `儲存失敗：${result.error?.message || "無法取得施工紀錄編號"}`, "error"); return;
+  $("saveBtn").disabled = false;
+  if (result.error) {
+    setMessage("entryMessage", `儲存失敗：${result.error.message}`, "error");
+    return;
   }
-  try {
-    if (selectedPhotoFiles.length) {
-      setMessage("entryMessage", "施工紀錄已儲存，正在上傳照片…");
-      const uploadedPaths = await uploadSelectedPhotos(entryId);
-      const nextPaths = [...existingPhotoPaths, ...uploadedPaths];
-      const { error: photoDbError } = await supabase.from("work_entries").update({ photo_paths: nextPaths }).eq("id", entryId);
-      if (photoDbError) throw new Error(`照片已上傳，但更新照片清單失敗：${photoDbError.message}`);
-      existingPhotoPaths = nextPaths;
-    }
-    $("saveBtn").disabled = false;
-    setMessage("entryMessage", editingId ? "修改已儲存。" : "施工紀錄已儲存至雲端。", "success");
-    resetForm(); await loadRecords();
-  } catch (err) {
-    $("saveBtn").disabled = false;
-    setMessage("entryMessage", `${err.message} 施工紀錄本身已保存，請檢查後再重試照片。`, "error");
-    await loadRecords();
-  }
+  setMessage("entryMessage", editingId ? "修改已儲存。" : "施工紀錄已儲存至雲端。", "success");
+  resetForm();
+  await loadRecords();
 }
 
 function readFilters(prefix = "filter") {
@@ -313,7 +240,7 @@ function readFilters(prefix = "filter") {
   };
 }
 async function fetchEntries(filters = readFilters()) {
-  let query = supabase.from("work_entries").select("*").order("work_date", { ascending: false }).order("created_at", { ascending: false }).limit(2000);
+  let query = supabaseClient.from("work_entries").select("*").order("work_date", { ascending: false }).order("created_at", { ascending: false }).limit(2000);
   if (filters.from) query = query.gte("work_date", filters.from);
   if (filters.to) query = query.lte("work_date", filters.to);
   if (filters.workType) query = query.eq("work_type", filters.workType);
@@ -342,7 +269,6 @@ function renderRecord(entry) {
     ${entry.point_name ? `<p class="record-meta">點位：${escapeHtml(entry.point_name)}</p>` : ""}
     ${entry.site_address ? `<p class="record-meta">地址：${escapeHtml(entry.site_address)}</p>` : ""}
     ${entry.notes ? `<p class="record-meta">備註：${escapeHtml(entry.notes)}</p>` : ""}
-    ${Array.isArray(entry.photo_paths) && entry.photo_paths.length ? `<p class="record-meta">施工照片：${entry.photo_paths.length} 張（編輯紀錄可查看）</p>` : ""}
     ${isSupervisor() && entry.created_by_name ? `<p class="record-meta">填報人：${escapeHtml(entry.created_by_name)}</p>` : ""}
     ${editButtons}
   </article>`;
@@ -363,7 +289,7 @@ async function loadRecords() {
 async function deleteEntry(id) {
   const entry = cachedEntries.find(item => item.id === id);
   if (!entry || !confirm(`確定刪除「${entry.site_name}／${entry.equipment_name}」這筆紀錄嗎？此操作無法復原。`)) return;
-  const { error } = await supabase.from("work_entries").delete().eq("id", id);
+  const { error } = await supabaseClient.from("work_entries").delete().eq("id", id);
   if (error) alert(`刪除失敗：${error.message}`);
   else await loadRecords();
 }
@@ -378,7 +304,7 @@ function exportCsv() {
     ["work_date","施工日期"],["site_name","施工場所"],["site_address","場所地址"],
     ["floor_area","樓層／區域"],["equipment_name","設備類別"],["equipment_spec","設備規格"],
     ["work_type","施工方式"],["quantity","數量"],["unit","單位"],["status","施工狀態"],
-    ["point_name","點位／編號"],["notes","備註"],["photo_paths","施工照片路徑"],["created_at","建立時間"]
+    ["point_name","點位／編號"],["notes","備註"],["created_at","建立時間"]
   ];
   const rows = [columns.map(c => csvCell(c[1])).join(",")];
   cachedEntries.forEach(entry => rows.push(columns.map(([key]) => csvCell(entry[key])).join(",")));
@@ -422,13 +348,6 @@ function wireEvents() {
   $("logoutBtn").addEventListener("click", logout);
   $("entryForm").addEventListener("submit", saveEntry);
   $("equipmentName").addEventListener("change", updateSpecOptions);
-  $("photoFiles").addEventListener("change", event => {
-    const newFiles = [...(event.target.files || [])];
-    const invalid = newFiles.find(file => !file.type.startsWith("image/") || file.size > MAX_PHOTO_BYTES);
-    if (invalid) { alert(`照片「${invalid.name}」格式不支援或超過 8 MB。請選擇圖片且每張不超過 8 MB。`); event.target.value = ""; return; }
-    selectedPhotoFiles = [...selectedPhotoFiles, ...newFiles];
-    event.target.value = ""; renderLocalPhotoPreview();
-  });
   $("cancelEditBtn").addEventListener("click", resetForm);
   document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
   $("refreshBtn").addEventListener("click", loadRecords);
@@ -459,16 +378,17 @@ async function init() {
     setConnection("等待 Supabase 設定");
     return;
   }
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const { data, error } = await supabase.auth.getSession();
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data, error } = await supabaseClient.auth.getSession();
   if (error) {
     setMessage("loginMessage", error.message, "error");
     return;
   }
   await onSession(data.session);
-  supabase.auth.onAuthStateChange((_event, session) => {
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
     // 避免在 auth callback 內直接執行太多同步工作。
     setTimeout(() => onSession(session), 0);
   });
 }
 document.addEventListener("DOMContentLoaded", init);
+                           
