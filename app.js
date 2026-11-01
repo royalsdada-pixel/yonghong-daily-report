@@ -6,18 +6,53 @@ const SUPABASE_URL = "https://mupbbqsizvioywweirnz.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_SMP0YsMXN51AkSBxhmAl6w_7V-pXPaG";
 
 const defaultEquipment = [
-  { name: "緊急照明燈", specs: ["小型", "中型", "大型"], unit: "具" },
-  { name: "緊急方向指示燈", specs: ["小型", "中型", "大型"], unit: "具" },
-  { name: "偵煙式探測器", specs: ["一般型", "其他／未分類"], unit: "顆" },
-  { name: "差動式探測器", specs: ["一般型", "其他／未分類"], unit: "顆" },
-  { name: "定溫式探測器", specs: ["一般型", "其他／未分類"], unit: "顆" },
-  { name: "火警壓扣", specs: ["一般型", "其他／未分類"], unit: "個" },
-  { name: "中繼器", specs: ["一般型", "其他／未分類"], unit: "只" },
-  { name: "喇叭", specs: ["一般型", "其他／未分類"], unit: "只" },
-  { name: "火警受信總機", specs: ["一般型", "其他／未分類"], unit: "台" },
-  { name: "消防栓箱／箱門", specs: ["一般型", "其他／未分類"], unit: "組" },
-  { name: "滅火器", specs: ["ABC乾粉", "二氧化碳", "其他／未分類"], unit: "支" },
-  { name: "其他設備", specs: ["其他／未分類"], unit: "個" }
+  { category: "火警自動警報設備", name: "偵煙式探測器", specs: ["一般型", "其他／未分類"], unit: "顆", sort_order: 10 },
+  { category: "火警自動警報設備", name: "差動式探測器", specs: ["一般型", "其他／未分類"], unit: "顆", sort_order: 20 },
+  { category: "火警自動警報設備", name: "定溫式探測器", specs: ["一般型", "其他／未分類"], unit: "顆", sort_order: 30 },
+  { category: "火警自動警報設備", name: "火焰式探測器", specs: ["一般型", "其他／未分類"], unit: "顆", sort_order: 40 },
+  { category: "火警自動警報設備", name: "火警壓扣", specs: ["一般型", "其他／未分類"], unit: "個", sort_order: 50 },
+  { category: "火警自動警報設備", name: "火警受信總機", specs: ["P型", "R型", "其他／未分類"], unit: "台", sort_order: 60 },
+  { category: "火警自動警報設備", name: "中繼器", specs: ["一般型", "隔離型", "其他／未分類"], unit: "只", sort_order: 70 },
+  { category: "火警自動警報設備", name: "警鈴", specs: ["一般型", "其他／未分類"], unit: "只", sort_order: 80 },
+  { category: "火警自動警報設備", name: "喇叭", specs: ["一般型", "其他／未分類"], unit: "只", sort_order: 90 },
+  { category: "火警自動警報設備", name: "緊急廣播設備", specs: ["一般型", "其他／未分類"], unit: "組", sort_order: 100 },
+  { category: "火警自動警報設備", name: "119 通報裝置", specs: ["一般型", "其他／未分類"], unit: "台", sort_order: 110 },
+  { category: "滅火設備", name: "10 型乾粉滅火器", specs: ["ABC乾粉", "其他／未分類"], unit: "支", sort_order: 120 },
+  { category: "滅火設備", name: "20 型乾粉滅火器", specs: ["ABC乾粉", "其他／未分類"], unit: "支", sort_order: 130 },
+  { category: "滅火設備", name: "二氧化碳滅火器", specs: ["5 型", "10 型", "其他／未分類"], unit: "支", sort_order: 140 },
+  { category: "滅火設備", name: "泡沫滅火設備", specs: ["一般型", "其他／未分類"], unit: "組", sort_order: 150 },
+  { category: "滅火設備", name: "室內消防栓", specs: ["一般型", "其他／未分類"], unit: "組", sort_order: 160 },
+  { category: "滅火設備", name: "室外消防栓", specs: ["一般型", "其他／未分類"], unit: "組", sort_order: 170 },
+  { category: "滅火設備", name: "消防泵浦", specs: ["一般型", "其他／未分類"], unit: "台", sort_order: 180 },
+  { category: "滅火設備", name: "消防送水口", specs: ["一般型", "其他／未分類"], unit: "口", sort_order: 190 },
+  { category: "滅火設備", name: "撒水頭", specs: ["一般型", "其他／未分類"], unit: "顆", sort_order: 200 },
+  { category: "滅火設備", name: "撒水泵浦", specs: ["一般型", "其他／未分類"], unit: "台", sort_order: 210 },
+  { category: "避難逃生設備", name: "緊急照明燈", specs: ["小型", "中型", "大型", "其他／未分類"], unit: "具", sort_order: 220 },
+  { category: "避難逃生設備", name: "出口標示燈", specs: ["小型", "中型", "大型", "其他／未分類"], unit: "具", sort_order: 230 },
+  { category: "避難逃生設備", name: "避難方向指示燈", specs: ["小型", "中型", "大型", "其他／未分類"], unit: "具", sort_order: 240 },
+  { category: "避難逃生設備", name: "避難器具", specs: ["一般型", "其他／未分類"], unit: "具", sort_order: 250 },
+  { category: "避難逃生設備", name: "緩降機", specs: ["一般型", "其他／未分類"], unit: "具", sort_order: 260 },
+  { category: "避難逃生設備", name: "排煙設備", specs: ["一般型", "其他／未分類"], unit: "組", sort_order: 270 },
+  { category: "避難逃生設備", name: "防火門", specs: ["一般型", "其他／未分類"], unit: "樘", sort_order: 280 },
+  { category: "消防箱與配件", name: "消防栓箱", specs: ["一般型", "其他／未分類"], unit: "組", sort_order: 290 },
+  { category: "消防箱與配件", name: "消防箱門扣", specs: ["一般型", "其他／未分類"], unit: "個", sort_order: 300 },
+  { category: "消防箱與配件", name: "消防水帶", specs: ["一般型", "其他／未分類"], unit: "條", sort_order: 310 },
+  { category: "消防箱與配件", name: "瞄子", specs: ["一般型", "其他／未分類"], unit: "支", sort_order: 320 },
+  { category: "消防箱與配件", name: "消防栓閥", specs: ["一般型", "其他／未分類"], unit: "個", sort_order: 330 },
+  { category: "消防箱與配件", name: "消防管路", specs: ["一般型", "其他／未分類"], unit: "式", sort_order: 340 },
+  { category: "消防箱與配件", name: "消防箱玻璃", specs: ["一般型", "其他／未分類"], unit: "片", sort_order: 350 },
+  { category: "消防箱與配件", name: "消防箱配件", specs: ["一般型", "其他／未分類"], unit: "個", sort_order: 360 },
+  { category: "施工與維修材料", name: "電線", specs: ["一般型", "其他／未分類"], unit: "公尺", sort_order: 370 },
+  { category: "施工與維修材料", name: "配管", specs: ["一般型", "其他／未分類"], unit: "公尺", sort_order: 380 },
+  { category: "施工與維修材料", name: "接線盒", specs: ["一般型", "其他／未分類"], unit: "個", sort_order: 390 },
+  { category: "施工與維修材料", name: "繼電器", specs: ["一般型", "其他／未分類"], unit: "個", sort_order: 400 },
+  { category: "施工與維修材料", name: "保險絲", specs: ["一般型", "其他／未分類"], unit: "個", sort_order: 410 },
+  { category: "施工與維修材料", name: "電源供應器", specs: ["一般型", "其他／未分類"], unit: "台", sort_order: 420 },
+  { category: "施工與維修材料", name: "電池", specs: ["一般型", "其他／未分類"], unit: "顆", sort_order: 430 },
+  { category: "施工與維修材料", name: "端子台", specs: ["一般型", "其他／未分類"], unit: "個", sort_order: 440 },
+  { category: "施工與維修材料", name: "其他材料", specs: ["其他／未分類"], unit: "個", sort_order: 450 },
+  { category: "其他設備", name: "太平龍頭", specs: ["一般型", "其他／未分類"], unit: "個", sort_order: 460 },
+  { category: "其他設備", name: "其他設備", specs: ["其他／未分類"], unit: "個", sort_order: 999 }
 ];
 
 let supabaseClient = null;
@@ -26,6 +61,10 @@ let currentProfile = null;
 let equipmentCatalog = [];
 let cachedEntries = [];
 let editingId = null;
+let existingPhotoPaths = [];
+let selectedPhotoFiles = [];
+const PHOTO_BUCKET = "work-photos";
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
 const $ = (id) => document.getElementById(id);
 const today = () => {
@@ -55,6 +94,7 @@ function showTab(name) {
   document.querySelectorAll(".tab-panel").forEach(panel => panel.classList.toggle("hidden", panel.id !== `tab-${name}`));
   if (name === "records") loadRecords();
   if (name === "stats") loadStats();
+  if (name === "catalog") showCatalogTab();
 }
 
 function seedEquipmentSelects() {
@@ -81,7 +121,7 @@ function updateSpecOptions() {
 
 async function loadEquipmentCatalog() {
   const { data, error } = await supabaseClient.from("equipment_catalog")
-    .select("name,specs,unit,active").eq("active", true).order("sort_order").order("name");
+    .select("id,category,name,specs,unit,active,sort_order").eq("active", true).order("sort_order").order("name");
   if (error) {
     console.warn("設備目錄讀取失敗，暫用內建選項：", error.message);
     equipmentCatalog = defaultEquipment;
@@ -89,6 +129,82 @@ async function loadEquipmentCatalog() {
     equipmentCatalog = data?.length ? data : defaultEquipment;
   }
   seedEquipmentSelects();
+  if (isSupervisor()) renderCatalogManager();
+}
+
+let equipmentCatalogAll = [];
+
+function showCatalogTab() {
+  if (!isSupervisor()) return;
+  loadCatalogManager();
+}
+function resetCatalogForm() {
+  $("catalogId").value = "";
+  $("catalogCategory").value = "火警自動警報設備";
+  $("catalogName").value = "";
+  $("catalogSpecs").value = "一般型, 其他／未分類";
+  $("catalogUnit").value = "個";
+  $("catalogSort").value = "100";
+  $("catalogActive").checked = true;
+  $("catalogSaveBtn").textContent = "新增品項";
+  setMessage("catalogMessage", "");
+}
+async function loadCatalogManager() {
+  if (!isSupervisor()) return;
+  const { data, error } = await supabaseClient.from("equipment_catalog")
+    .select("id,category,name,specs,unit,active,sort_order").order("sort_order").order("name");
+  if (error) { setMessage("catalogMessage", `讀取品項失敗：${error.message}`, "error"); return; }
+  equipmentCatalogAll = data || [];
+  renderCatalogManager();
+}
+function renderCatalogManager() {
+  const target = $("catalogList");
+  if (!target || !isSupervisor()) return;
+  target.innerHTML = equipmentCatalogAll.length ? equipmentCatalogAll.map(item => `
+    <tr><td>${escapeHtml(item.category || "其他設備")}</td><td>${escapeHtml(item.name)}</td>
+    <td>${escapeHtml((item.specs || []).join("、"))}</td><td>${escapeHtml(item.unit)}</td>
+    <td>${item.active ? "啟用" : "停用"}</td><td><button class="btn btn-secondary" type="button" data-catalog-action="edit" data-id="${item.id}">編輯</button>
+    <button class="btn btn-secondary" type="button" data-catalog-action="toggle" data-id="${item.id}">${item.active ? "停用" : "啟用"}</button></td></tr>`).join("")
+    : `<tr><td colspan="6">尚無品項</td></tr>`;
+}
+async function saveCatalogItem(event) {
+  event.preventDefault();
+  if (!isSupervisor()) return;
+  const name = $("catalogName").value.trim();
+  const specs = [...new Set($("catalogSpecs").value.split(/[,，、\n]/).map(x => x.trim()).filter(Boolean))];
+  const payload = { category: $("catalogCategory").value, name, specs, unit: $("catalogUnit").value.trim(), sort_order: Number($("catalogSort").value || 100), active: $("catalogActive").checked };
+  if (!name || !payload.unit) { setMessage("catalogMessage", "請填寫品項名稱與單位。", "error"); return; }
+  const id = $("catalogId").value;
+  const result = id
+    ? await supabaseClient.from("equipment_catalog").update(payload).eq("id", Number(id))
+    : await supabaseClient.from("equipment_catalog").insert(payload);
+  if (result.error) { setMessage("catalogMessage", `儲存失敗：${result.error.message}`, "error"); return; }
+  setMessage("catalogMessage", id ? "品項已更新。" : "品項已新增。", "success");
+  resetCatalogForm();
+  await loadCatalogManager();
+  await loadEquipmentCatalog();
+}
+async function catalogAction(event) {
+  const btn = event.target.closest("button[data-catalog-action]");
+  if (!btn || !isSupervisor()) return;
+  const item = equipmentCatalogAll.find(x => String(x.id) === btn.dataset.id);
+  if (!item) return;
+  if (btn.dataset.catalogAction === "edit") {
+    $("catalogId").value = item.id;
+    $("catalogCategory").value = item.category || "其他設備";
+    $("catalogName").value = item.name;
+    $("catalogSpecs").value = (item.specs || []).join(", ");
+    $("catalogUnit").value = item.unit || "個";
+    $("catalogSort").value = item.sort_order ?? 100;
+    $("catalogActive").checked = !!item.active;
+    $("catalogSaveBtn").textContent = "儲存修改";
+    setMessage("catalogMessage", `正在編輯：${item.name}`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } else if (btn.dataset.catalogAction === "toggle") {
+    const { error } = await supabaseClient.from("equipment_catalog").update({ active: !item.active }).eq("id", item.id);
+    if (error) setMessage("catalogMessage", `更新失敗：${error.message}`, "error");
+    else { await loadCatalogManager(); await loadEquipmentCatalog(); }
+  }
 }
 
 async function loadProfile(user) {
@@ -116,6 +232,7 @@ async function onSession(session) {
   try {
     await loadProfile(currentUser);
     await loadEquipmentCatalog();
+    $("catalogTabBtn").classList.toggle("hidden", !isSupervisor());
     setLoggedInUI(true);
     setConnection("雲端已連線");
     await loadRecords();
@@ -136,6 +253,79 @@ async function login(event) {
   if (error) setMessage("loginMessage", `登入失敗：${error.message}`, "error");
   else setMessage("loginMessage", "登入成功。", "success");
 }
+
+function isPasswordRecoveryLink() {
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  return hash.get("type") === "recovery" || window.location.hash.includes("reset-password");
+}
+
+function showPasswordResetPanel() {
+  $("loginPanel").classList.add("hidden");
+  $("appPanel").classList.add("hidden");
+  $("passwordResetPanel").classList.remove("hidden");
+  $("logoutBtn").classList.add("hidden");
+  setConnection("正在重設密碼");
+}
+
+function showLoginPanel(message = "", kind = "") {
+  $("passwordResetPanel").classList.add("hidden");
+  $("loginPanel").classList.remove("hidden");
+  $("appPanel").classList.add("hidden");
+  setMessage("loginMessage", message, kind);
+}
+
+async function requestPasswordReset() {
+  const email = $("email").value.trim();
+  if (!email) {
+    setMessage("loginMessage", "請先輸入電子郵件，再點選忘記密碼。", "error");
+    $("email").focus();
+    return;
+  }
+  if (!$("email").checkValidity()) {
+    setMessage("loginMessage", "請輸入有效的電子郵件地址。", "error");
+    $("email").focus();
+    return;
+  }
+  const button = $("forgotPasswordBtn");
+  button.disabled = true;
+  setMessage("loginMessage", "正在寄送重設密碼信…");
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+  button.disabled = false;
+  if (error) {
+    setMessage("loginMessage", `寄送失敗：${error.message}`, "error");
+  } else {
+    setMessage("loginMessage", "已提出寄送要求。請查看信箱及垃圾郵件匣，並由同一個永鴻系統網址開啟信件連結。", "success");
+  }
+}
+
+async function updatePassword(event) {
+  event.preventDefault();
+  const password = $("newPassword").value;
+  const confirm = $("confirmPassword").value;
+  if (password.length < 8) {
+    setMessage("resetPasswordMessage", "新密碼至少需要 8 個字元。", "error");
+    return;
+  }
+  if (password !== confirm) {
+    setMessage("resetPasswordMessage", "兩次輸入的新密碼不一致，請再確認。", "error");
+    return;
+  }
+  const button = $("updatePasswordBtn");
+  button.disabled = true;
+  setMessage("resetPasswordMessage", "正在更新密碼…");
+  const { error } = await supabaseClient.auth.updateUser({ password });
+  button.disabled = false;
+  if (error) {
+    setMessage("resetPasswordMessage", `更新失敗：${error.message}`, "error");
+    return;
+  }
+  await supabaseClient.auth.signOut();
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  $("passwordResetForm").reset();
+  showLoginPanel("密碼已更新，請使用新密碼登入。", "success");
+  setConnection("尚未登入");
+}
 async function logout() {
   const { error } = await supabaseClient.auth.signOut();
   if (error) alert(`登出失敗：${error.message}`);
@@ -145,8 +335,66 @@ async function logout() {
   }
 }
 
+function safeFileName(name) {
+  const cleaned = String(name || "photo").normalize("NFKC").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-90);
+  return cleaned || "photo";
+}
+function renderLocalPhotoPreview() {
+  const preview = $("photoPreview");
+  preview.innerHTML = "";
+  selectedPhotoFiles.forEach((file, index) => {
+    const url = URL.createObjectURL(file);
+    const item = document.createElement("div");
+    item.className = "photo-item";
+    item.innerHTML = `<img alt="待上傳施工照片"><button class="photo-remove" type="button" aria-label="移除照片">×</button><div class="photo-caption"></div>`;
+    item.querySelector("img").src = url;
+    item.querySelector(".photo-caption").textContent = file.name;
+    item.querySelector("button").addEventListener("click", () => {
+      URL.revokeObjectURL(url);
+      selectedPhotoFiles.splice(index, 1);
+      renderLocalPhotoPreview();
+    });
+    preview.appendChild(item);
+  });
+}
+async function renderExistingPhotos(paths) {
+  const container = $("existingPhotos");
+  container.innerHTML = "";
+  if (!paths?.length || !supabase) return;
+  const heading = document.createElement("div");
+  heading.className = "muted small";
+  heading.textContent = "已儲存的施工照片";
+  container.appendChild(heading);
+  for (const path of paths) {
+    const { data, error } = await supabaseClient.storage.from(PHOTO_BUCKET).createSignedUrl(path, 3600);
+    if (error || !data?.signedUrl) continue;
+    const wrap = document.createElement("div"); wrap.className = "photo-item";
+    const link = document.createElement("a"); link.href = data.signedUrl; link.target = "_blank"; link.rel = "noopener noreferrer";
+    const img = document.createElement("img"); img.src = data.signedUrl; img.alt = "施工照片"; link.appendChild(img); wrap.appendChild(link);
+    const caption = document.createElement("div"); caption.className = "photo-caption"; caption.textContent = "已上傳"; wrap.appendChild(caption);
+    container.appendChild(wrap);
+  }
+}
+async function uploadSelectedPhotos(entryId) {
+  const uploaded = [];
+  for (const file of selectedPhotoFiles) {
+    if (!file.type.startsWith("image/")) throw new Error(`「${file.name}」不是圖片檔。`);
+    if (file.size > MAX_PHOTO_BYTES) throw new Error(`「${file.name}」超過 8 MB，請先縮小照片。`);
+    const path = `${currentUser.id}/${entryId}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
+    const { error } = await supabaseClient.storage.from(PHOTO_BUCKET).upload(path, file, { cacheControl: "3600", upsert: false, contentType: file.type });
+    if (error) throw new Error(`照片上傳失敗（${file.name}）：${error.message}`);
+    uploaded.push(path);
+  }
+  return uploaded;
+}
+
 function resetForm() {
   editingId = null;
+  existingPhotoPaths = [];
+  selectedPhotoFiles = [];
+  $("photoFiles").value = "";
+  $("photoPreview").innerHTML = "";
+  $("existingPhotos").innerHTML = "";
   $("entryId").value = "";
   $("entryForm").reset();
   $("workDate").value = today();
@@ -184,6 +432,11 @@ function startEdit(entry) {
   $("status").value = entry.status;
   $("pointName").value = entry.point_name || "";
   $("notes").value = entry.notes || "";
+  existingPhotoPaths = Array.isArray(entry.photo_paths) ? [...entry.photo_paths] : [];
+  selectedPhotoFiles = [];
+  $("photoFiles").value = "";
+  $("photoPreview").innerHTML = "";
+  renderExistingPhotos(existingPhotoPaths);
   $("formTitle").textContent = "修改施工紀錄";
   $("saveBtn").textContent = "儲存修改";
   $("cancelEditBtn").classList.remove("hidden");
@@ -196,39 +449,45 @@ async function saveEntry(event) {
   event.preventDefault();
   if (!currentUser) return;
   const payload = {
-    work_date: $("workDate").value,
-    site_name: $("siteName").value.trim(),
-    site_address: $("siteAddress").value.trim() || null,
-    floor_area: $("floorArea").value.trim() || null,
-    equipment_name: $("equipmentName").value,
-    equipment_spec: $("equipmentSpec").value || null,
-    work_type: $("workType").value,
-    quantity: Number($("quantity").value),
-    unit: $("unit").value.trim(),
-    status: $("status").value,
-    point_name: $("pointName").value.trim() || null,
-    notes: $("notes").value.trim() || null
+    work_date: $("workDate").value, site_name: $("siteName").value.trim(),
+    site_address: $("siteAddress").value.trim() || null, floor_area: $("floorArea").value.trim() || null,
+    equipment_name: $("equipmentName").value, equipment_spec: $("equipmentSpec").value || null,
+    work_type: $("workType").value, quantity: Number($("quantity").value), unit: $("unit").value.trim(),
+    status: $("status").value, point_name: $("pointName").value.trim() || null, notes: $("notes").value.trim() || null
   };
   if (!payload.site_name || !payload.equipment_name || !payload.work_date || !(payload.quantity > 0) || !payload.unit) {
-    setMessage("entryMessage", "請確認日期、場所、設備、正確數量及單位。", "error");
-    return;
+    setMessage("entryMessage", "請確認日期、場所、設備、正確數量及單位。", "error"); return;
   }
   $("saveBtn").disabled = true;
-  setMessage("entryMessage", "正在儲存至雲端…");
+  setMessage("entryMessage", "正在儲存施工紀錄…");
+  let entryId = editingId;
   let result;
-  if (editingId) {
-    result = await supabaseClient.from("work_entries").update(payload).eq("id", editingId).select("id").single();
-  } else {
+  if (editingId) result = await supabaseClient.from("work_entries").update(payload).eq("id", editingId).select("id").single();
+  else {
     result = await supabaseClient.from("work_entries").insert({ ...payload, created_by: currentUser.id }).select("id").single();
+    entryId = result.data?.id || null;
   }
-  $("saveBtn").disabled = false;
-  if (result.error) {
-    setMessage("entryMessage", `儲存失敗：${result.error.message}`, "error");
-    return;
+  if (result.error || !entryId) {
+    $("saveBtn").disabled = false;
+    setMessage("entryMessage", `儲存失敗：${result.error?.message || "無法取得施工紀錄編號"}`, "error"); return;
   }
-  setMessage("entryMessage", editingId ? "修改已儲存。" : "施工紀錄已儲存至雲端。", "success");
-  resetForm();
-  await loadRecords();
+  try {
+    if (selectedPhotoFiles.length) {
+      setMessage("entryMessage", "施工紀錄已儲存，正在上傳照片…");
+      const uploadedPaths = await uploadSelectedPhotos(entryId);
+      const nextPaths = [...existingPhotoPaths, ...uploadedPaths];
+      const { error: photoDbError } = await supabaseClient.from("work_entries").update({ photo_paths: nextPaths }).eq("id", entryId);
+      if (photoDbError) throw new Error(`照片已上傳，但更新照片清單失敗：${photoDbError.message}`);
+      existingPhotoPaths = nextPaths;
+    }
+    $("saveBtn").disabled = false;
+    setMessage("entryMessage", editingId ? "修改已儲存。" : "施工紀錄已儲存至雲端。", "success");
+    resetForm(); await loadRecords();
+  } catch (err) {
+    $("saveBtn").disabled = false;
+    setMessage("entryMessage", `${err.message} 施工紀錄本身已保存，請檢查後再重試照片。`, "error");
+    await loadRecords();
+  }
 }
 
 function readFilters(prefix = "filter") {
@@ -269,6 +528,7 @@ function renderRecord(entry) {
     ${entry.point_name ? `<p class="record-meta">點位：${escapeHtml(entry.point_name)}</p>` : ""}
     ${entry.site_address ? `<p class="record-meta">地址：${escapeHtml(entry.site_address)}</p>` : ""}
     ${entry.notes ? `<p class="record-meta">備註：${escapeHtml(entry.notes)}</p>` : ""}
+    ${Array.isArray(entry.photo_paths) && entry.photo_paths.length ? `<p class="record-meta">施工照片：${entry.photo_paths.length} 張（編輯紀錄可查看）</p>` : ""}
     ${isSupervisor() && entry.created_by_name ? `<p class="record-meta">填報人：${escapeHtml(entry.created_by_name)}</p>` : ""}
     ${editButtons}
   </article>`;
@@ -304,7 +564,7 @@ function exportCsv() {
     ["work_date","施工日期"],["site_name","施工場所"],["site_address","場所地址"],
     ["floor_area","樓層／區域"],["equipment_name","設備類別"],["equipment_spec","設備規格"],
     ["work_type","施工方式"],["quantity","數量"],["unit","單位"],["status","施工狀態"],
-    ["point_name","點位／編號"],["notes","備註"],["created_at","建立時間"]
+    ["point_name","點位／編號"],["notes","備註"],["photo_paths","施工照片路徑"],["created_at","建立時間"]
   ];
   const rows = [columns.map(c => csvCell(c[1])).join(",")];
   cachedEntries.forEach(entry => rows.push(columns.map(([key]) => csvCell(entry[key])).join(",")));
@@ -345,9 +605,22 @@ async function loadStats() {
 
 function wireEvents() {
   $("loginForm").addEventListener("submit", login);
+  $("forgotPasswordBtn").addEventListener("click", requestPasswordReset);
+  $("passwordResetForm").addEventListener("submit", updatePassword);
+  $("catalogForm").addEventListener("submit", saveCatalogItem);
+  $("catalogResetBtn").addEventListener("click", resetCatalogForm);
+  $("catalogRefreshBtn").addEventListener("click", loadCatalogManager);
+  $("catalogList").addEventListener("click", catalogAction);
   $("logoutBtn").addEventListener("click", logout);
   $("entryForm").addEventListener("submit", saveEntry);
   $("equipmentName").addEventListener("change", updateSpecOptions);
+  $("photoFiles").addEventListener("change", event => {
+    const newFiles = [...(event.target.files || [])];
+    const invalid = newFiles.find(file => !file.type.startsWith("image/") || file.size > MAX_PHOTO_BYTES);
+    if (invalid) { alert(`照片「${invalid.name}」格式不支援或超過 8 MB。請選擇圖片且每張不超過 8 MB。`); event.target.value = ""; return; }
+    selectedPhotoFiles = [...selectedPhotoFiles, ...newFiles];
+    event.target.value = ""; renderLocalPhotoPreview();
+  });
   $("cancelEditBtn").addEventListener("click", resetForm);
   document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
   $("refreshBtn").addEventListener("click", loadRecords);
@@ -384,11 +657,19 @@ async function init() {
     setMessage("loginMessage", error.message, "error");
     return;
   }
-  await onSession(data.session);
-  supabaseClient.auth.onAuthStateChange((_event, session) => {
+  if (isPasswordRecoveryLink()) {
+    showPasswordResetPanel();
+  } else {
+    await onSession(data.session);
+  }
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    // Supabase recovery link 會以 PASSWORD_RECOVERY 事件進入此處。
+    if (event === "PASSWORD_RECOVERY") {
+      showPasswordResetPanel();
+      return;
+    }
     // 避免在 auth callback 內直接執行太多同步工作。
     setTimeout(() => onSession(session), 0);
   });
 }
 document.addEventListener("DOMContentLoaded", init);
-                           
