@@ -651,25 +651,39 @@ async function init() {
     setConnection("等待 Supabase 設定");
     return;
   }
+
+  // 必須在建立 Supabase client 前記住網址是否帶有 recovery 標記，
+  // 因為 client 可能在處理驗證連結時變更網址 hash。
+  let recoveryMode = isPasswordRecoveryLink();
   supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // 先註冊事件，再呼叫 getSession，避免錯過 PASSWORD_RECOVERY 事件。
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === "PASSWORD_RECOVERY") {
+      recoveryMode = true;
+      showPasswordResetPanel();
+      return;
+    }
+
+    // 重設流程剛載入時，不要讓初始登入工作階段搶先切回工作台。
+    if (recoveryMode && event !== "SIGNED_OUT") {
+      return;
+    }
+
+    // 避免在 auth callback 內直接執行太多同步工作。
+    setTimeout(() => onSession(session), 0);
+  });
+
   const { data, error } = await supabaseClient.auth.getSession();
   if (error) {
     setMessage("loginMessage", error.message, "error");
     return;
   }
-  if (isPasswordRecoveryLink()) {
+
+  if (recoveryMode) {
     showPasswordResetPanel();
   } else {
     await onSession(data.session);
   }
-  supabaseClient.auth.onAuthStateChange((event, session) => {
-    // Supabase recovery link 會以 PASSWORD_RECOVERY 事件進入此處。
-    if (event === "PASSWORD_RECOVERY") {
-      showPasswordResetPanel();
-      return;
-    }
-    // 避免在 auth callback 內直接執行太多同步工作。
-    setTimeout(() => onSession(session), 0);
-  });
 }
 document.addEventListener("DOMContentLoaded", init);
