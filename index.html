@@ -206,15 +206,15 @@
           <button id="exportCsvBtn" class="btn btn-secondary" type="button">匯出 CSV</button>
           <button id="exportExcelBtn" class="btn btn-primary" type="button">匯出 Excel</button>
         </div>
-        <div class="form-grid" style="margin-top: 12px;">
-          <label>單一品項匯出
-            <select id="exportEquipmentFilter">
-              <option value="">全部品項（依目前篩選匯出）</option>
-            </select>
-            <span class="hint">選擇指定品項後，按「匯出單一品項」只匯出該品項明細。</span>
-          </label>
-          <div style="display:flex;align-items:end;">
-            <button id="exportSingleItemExcelBtn" class="btn btn-secondary" type="button">匯出單一品項 Excel</button>
+        <div class="panel" style="margin-top: 12px; padding: 14px;">
+          <h3 style="margin-top:0;">依施工場所勾選匯出</h3>
+          <p class="hint">勾選一個或多個施工場所，例如「成功大學醫學院」，再按下方按鈕。清單會依目前施工紀錄篩選條件更新。</p>
+          <div id="exportSiteFilters" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:4px;max-height:240px;overflow:auto;border:1px solid #d8e4e0;border-radius:10px;padding:8px;">
+            <p class="muted small">載入施工紀錄後顯示場所清單。</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+            <button id="exportSingleItemExcelBtn" class="btn btn-secondary" type="button">匯出勾選場所 Excel</button>
+            <button id="clearExportSitesBtn" class="btn btn-secondary" type="button">清除場所勾選</button>
           </div>
         </div>
         <p id="exportExcelMessage" class="message" role="status"></p>

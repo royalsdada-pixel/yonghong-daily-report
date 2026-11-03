@@ -538,7 +538,7 @@ async function loadRecords() {
   $("recordsList").innerHTML = `<p class="muted">載入中…</p>`;
   try {
     cachedEntries = await fetchEntries();
-    populateExportEquipmentFilter(cachedEntries);
+    populateExportSiteFilters(cachedEntries);
     $("recordsSummary").textContent = `共 ${cachedEntries.length} 筆紀錄${isSupervisor() ? "（主管檢視全公司可讀取資料）" : "（僅顯示自己的紀錄）"}`;
     $("recordsList").innerHTML = cachedEntries.length
       ? cachedEntries.map(renderRecord).join("")
@@ -575,15 +575,23 @@ function exportCsv() {
   a.href = url; a.download = `永鴻消防施工紀錄_${today()}.csv`;
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
-function populateExportEquipmentFilter(entries) {
-  const select = $("exportEquipmentFilter");
-  if (!select) return;
-  const previous = select.value;
-  const names = [...new Set((entries || []).map(e => String(e.equipment_name || "").trim()).filter(Boolean))]
+function populateExportSiteFilters(entries) {
+  const container = $("exportSiteFilters");
+  if (!container) return;
+  const previouslySelected = new Set(
+    [...container.querySelectorAll('input[name="exportSite"]:checked')].map(input => input.value)
+  );
+  const sites = [...new Set((entries || []).map(e => String(e.site_name || "").trim()).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "zh-Hant"));
-  select.innerHTML = '<option value="">全部品項（依目前篩選匯出）</option>' +
-    names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
-  if (names.includes(previous)) select.value = previous;
+  if (!sites.length) {
+    container.innerHTML = '<p class="muted small">目前篩選條件下沒有施工場所。</p>';
+    return;
+  }
+  container.innerHTML = sites.map(site => `
+    <label class="inline-check" style="display:flex;align-items:center;gap:8px;padding:6px 8px;">
+      <input type="checkbox" name="exportSite" value="${escapeHtml(site)}" ${previouslySelected.has(site) ? "checked" : ""}>
+      <span>${escapeHtml(site)}</span>
+    </label>`).join("");
 }
 function setExportMessage(message, kind = "") {
   const el = $("exportExcelMessage");
@@ -677,9 +685,11 @@ async function exportExcel(singleItem = false) {
     setExportMessage("Excel 匯出元件載入失敗，請重新整理頁面後再試。", "error");
     return;
   }
-  const selectedItem = singleItem ? $("exportEquipmentFilter").value : "";
-  if (singleItem && !selectedItem) {
-    setExportMessage("請先選擇要匯出的施工品項。", "error");
+  const selectedSites = singleItem
+    ? [...document.querySelectorAll('input[name="exportSite"]:checked')].map(input => input.value)
+    : [];
+  if (singleItem && !selectedSites.length) {
+    setExportMessage("請至少勾選一個要匯出的施工場所。", "error");
     return;
   }
   const buttons = [$("exportExcelBtn"), $("exportSingleItemExcelBtn")].filter(Boolean);
@@ -688,7 +698,7 @@ async function exportExcel(singleItem = false) {
   try {
     // 匯出時重新依目前畫面篩選條件讀取，避免使用者未按「套用篩選」而匯出舊結果。
     let entries = await fetchEntries(readFilters());
-    if (selectedItem) entries = entries.filter(e => e.equipment_name === selectedItem);
+    if (selectedSites.length) entries = entries.filter(e => selectedSites.includes(e.site_name));
     if (!entries.length) {
       setExportMessage("目前條件沒有可匯出的施工紀錄。", "error");
       return;
@@ -759,7 +769,7 @@ async function exportExcel(singleItem = false) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const suffix = selectedItem ? `_${selectedItem}` : "";
+    const suffix = selectedSites.length ? `_${selectedSites.length === 1 ? selectedSites[0] : `選取${selectedSites.length}個場所`}` : "";
     a.download = `永鴻消防施工日報_${today()}${suffix}.xlsx`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
@@ -833,6 +843,9 @@ function wireEvents() {
   $("exportCsvBtn").addEventListener("click", exportCsv);
   $("exportExcelBtn").addEventListener("click", () => exportExcel(false));
   $("exportSingleItemExcelBtn").addEventListener("click", () => exportExcel(true));
+  $("clearExportSitesBtn").addEventListener("click", () => {
+    document.querySelectorAll('input[name="exportSite"]').forEach(input => { input.checked = false; });
+  });
   $("statsBtn").addEventListener("click", loadStats);
   $("recordsList").addEventListener("click", async event => {
     const btn = event.target.closest("button[data-action]");
