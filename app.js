@@ -360,13 +360,13 @@ function renderLocalPhotoPreview() {
 async function renderExistingPhotos(paths) {
   const container = $("existingPhotos");
   container.innerHTML = "";
-  if (!paths?.length || !supabase) return;
+  if (!paths?.length || !supabaseClient) return;
   const heading = document.createElement("div");
   heading.className = "muted small";
   heading.textContent = "已儲存的施工照片";
   container.appendChild(heading);
   for (const path of paths) {
-    const { data, error } = await supabaseClient.storage.from(PHOTO_BUCKET).createSignedUrl(path, 3600);
+    const { data, error } = await supabaseClient.storage.from(PHOTO_BUCKET).createSignedUrl(path, 604800);
     if (error || !data?.signedUrl) continue;
     const wrap = document.createElement("div"); wrap.className = "photo-item";
     const link = document.createElement("a"); link.href = data.signedUrl; link.target = "_blank"; link.rel = "noopener noreferrer";
@@ -538,6 +538,7 @@ async function loadRecords() {
   $("recordsList").innerHTML = `<p class="muted">載入中…</p>`;
   try {
     cachedEntries = await fetchEntries();
+    populateExportEquipmentFilter(cachedEntries);
     $("recordsSummary").textContent = `共 ${cachedEntries.length} 筆紀錄${isSupervisor() ? "（主管檢視全公司可讀取資料）" : "（僅顯示自己的紀錄）"}`;
     $("recordsList").innerHTML = cachedEntries.length
       ? cachedEntries.map(renderRecord).join("")
@@ -574,6 +575,206 @@ function exportCsv() {
   a.href = url; a.download = `永鴻消防施工紀錄_${today()}.csv`;
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
+function populateExportEquipmentFilter(entries) {
+  const select = $("exportEquipmentFilter");
+  if (!select) return;
+  const previous = select.value;
+  const names = [...new Set((entries || []).map(e => String(e.equipment_name || "").trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "zh-Hant"));
+  select.innerHTML = '<option value="">全部品項（依目前篩選匯出）</option>' +
+    names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
+  if (names.includes(previous)) select.value = previous;
+}
+function setExportMessage(message, kind = "") {
+  const el = $("exportExcelMessage");
+  if (!el) return;
+  el.textContent = message;
+  el.className = `message${kind ? " " + kind : ""}`;
+}
+function sortExportEntries(entries) {
+  return [...entries].sort((a, b) =>
+    String(b.work_date || "").localeCompare(String(a.work_date || "")) ||
+    String(a.site_name || "").localeCompare(String(b.site_name || ""), "zh-Hant") ||
+    String(a.equipment_name || "").localeCompare(String(b.equipment_name || ""), "zh-Hant") ||
+    String(a.equipment_spec || "").localeCompare(String(b.equipment_spec || ""), "zh-Hant") ||
+    String(a.work_type || "").localeCompare(String(b.work_type || ""), "zh-Hant")
+  );
+}
+function styleWorksheetHeader(row) {
+  row.height = 28;
+  row.eachCell(cell => {
+    cell.font = { name: "Microsoft JhengHei", bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF174E46" } };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cell.border = { bottom: { style: "thin", color: { argb: "FFB7C9C5" } } };
+  });
+}
+function workbookImageBase64(buffer) {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+async function addPhotoSheet(workbook, entries) {
+  const photos = [];
+  for (const entry of entries) {
+    for (const path of (Array.isArray(entry.photo_paths) ? entry.photo_paths : [])) {
+      photos.push({ entry, path });
+    }
+  }
+  if (!photos.length) return { count: 0, failed: 0 };
+  const ws = workbook.addWorksheet("施工照片", { views: [{ state: "frozen", ySplit: 1 }] });
+  ws.columns = [
+    { header: "施工日期", key: "date", width: 14 },
+    { header: "施工場所", key: "site", width: 28 },
+    { header: "施工項目", key: "item", width: 26 },
+    { header: "施工方式", key: "type", width: 14 },
+    { header: "照片", key: "photo", width: 24 },
+    { header: "照片連結", key: "link", width: 42 }
+  ];
+  styleWorksheetHeader(ws.getRow(1));
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+  let embedded = 0, failed = 0, rowNum = 2;
+  for (const photo of photos) {
+    const { entry, path } = photo;
+    const row = ws.getRow(rowNum);
+    row.getCell(1).value = entry.work_date || "";
+    row.getCell(2).value = entry.site_name || "";
+    row.getCell(3).value = `${entry.equipment_name || ""}${entry.equipment_spec ? "／" + entry.equipment_spec : ""}`;
+    row.getCell(4).value = entry.work_type || "";
+    row.height = 92;
+    try {
+      const { data, error } = await supabaseClient.storage.from(PHOTO_BUCKET).createSignedUrl(path, 604800);
+      if (error || !data?.signedUrl) throw new Error(error?.message || "無法取得照片連結");
+      row.getCell(6).value = { text: "開啟施工照片", hyperlink: data.signedUrl, tooltip: "照片連結約 7 天有效，請在有效時間內開啟" };
+      row.getCell(6).font = { color: { argb: "FF0563C1" }, underline: true };
+      const response = await fetch(data.signedUrl);
+      if (!response.ok) throw new Error(`照片下載失敗：HTTP ${response.status}`);
+      const buffer = await response.arrayBuffer();
+      const contentType = (response.headers.get("content-type") || "").toLowerCase();
+      let extension = contentType.includes("png") || path.toLowerCase().endsWith(".png") ? "png" :
+        (contentType.includes("gif") || path.toLowerCase().endsWith(".gif") ? "gif" : "jpeg");
+      // ExcelJS supports PNG/JPEG reliably; convert only by preserving supported formats.
+      if (extension === "gif") throw new Error("GIF 不支援直接嵌入，已保留照片連結");
+      const imageId = workbook.addImage({ base64: workbookImageBase64(buffer), extension });
+      ws.addImage(imageId, { tl: { col: 4, row: rowNum - 1 }, br: { col: 5, row: rowNum } });
+      embedded++;
+    } catch (err) {
+      failed++;
+      if (!row.getCell(6).value) row.getCell(6).value = `無法產生連結：${err.message || "未知錯誤"}`;
+    }
+    row.eachCell(cell => { cell.alignment = { vertical: "middle", wrapText: true }; });
+    rowNum++;
+  }
+  ws.autoFilter = { from: "A1", to: `F${Math.max(1, rowNum - 1)}` };
+  return { count: embedded, failed, total: photos.length };
+}
+async function exportExcel(singleItem = false) {
+  if (!window.ExcelJS) {
+    setExportMessage("Excel 匯出元件載入失敗，請重新整理頁面後再試。", "error");
+    return;
+  }
+  const selectedItem = singleItem ? $("exportEquipmentFilter").value : "";
+  if (singleItem && !selectedItem) {
+    setExportMessage("請先選擇要匯出的施工品項。", "error");
+    return;
+  }
+  const buttons = [$("exportExcelBtn"), $("exportSingleItemExcelBtn")].filter(Boolean);
+  buttons.forEach(btn => btn.disabled = true);
+  setExportMessage("正在整理施工明細與照片，請稍候…");
+  try {
+    // 匯出時重新依目前畫面篩選條件讀取，避免使用者未按「套用篩選」而匯出舊結果。
+    let entries = await fetchEntries(readFilters());
+    if (selectedItem) entries = entries.filter(e => e.equipment_name === selectedItem);
+    if (!entries.length) {
+      setExportMessage("目前條件沒有可匯出的施工紀錄。", "error");
+      return;
+    }
+    entries = sortExportEntries(entries);
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "永鴻消防器材行";
+    workbook.created = new Date();
+    workbook.modified = new Date();
+    workbook.subject = "每日施工報表";
+    workbook.title = "永鴻消防施工日報明細";
+    const ws = workbook.addWorksheet("施工明細", { views: [{ state: "frozen", ySplit: 1 }] });
+    ws.columns = [
+      { header: "施工日期", key: "date", width: 14 },
+      { header: "施工場所", key: "site", width: 28 },
+      { header: "場所地址", key: "address", width: 28 },
+      { header: "樓層／區域", key: "area", width: 18 },
+      { header: "施工項目", key: "item", width: 24 },
+      { header: "規格", key: "spec", width: 18 },
+      { header: "施工方式", key: "type", width: 14 },
+      { header: "數量", key: "quantity", width: 10 },
+      { header: "單位", key: "unit", width: 10 },
+      { header: "施工狀態", key: "status", width: 14 },
+      { header: "點位／編號", key: "point", width: 22 },
+      { header: "備註", key: "notes", width: 38 },
+      { header: "照片數量", key: "photoCount", width: 12 },
+      { header: "填報人", key: "worker", width: 18 }
+    ];
+    styleWorksheetHeader(ws.getRow(1));
+    entries.forEach(entry => {
+      const row = ws.addRow({
+        date: entry.work_date || "", site: entry.site_name || "", address: entry.site_address || "",
+        area: entry.floor_area || "", item: entry.equipment_name || "", spec: entry.equipment_spec || "",
+        type: entry.work_type || "", quantity: Number(entry.quantity || 0), unit: entry.unit || "",
+        status: entry.status || "", point: entry.point_name || "", notes: entry.notes || "",
+        photoCount: Array.isArray(entry.photo_paths) ? entry.photo_paths.length : 0,
+        worker: entry.created_by_name || ""
+      });
+      row.height = 25;
+      row.eachCell(cell => { cell.alignment = { vertical: "middle", wrapText: true }; cell.border = { bottom: { style: "hair", color: { argb: "FFD9E2E0" } } }; });
+    });
+    // 同一天、同一施工場所的連續明細合併日期與場所欄；每個施工項目仍保留獨立一列。
+    let index = 0;
+    while (index < entries.length) {
+      const first = entries[index];
+      let endIndex = index + 1;
+      while (endIndex < entries.length &&
+             entries[endIndex].work_date === first.work_date &&
+             entries[endIndex].site_name === first.site_name) {
+        endIndex++;
+      }
+      const firstRow = index + 2;
+      const lastRow = endIndex + 1;
+      if (endIndex - index >= 2) {
+        ws.mergeCells(firstRow, 1, lastRow, 1);
+        ws.mergeCells(firstRow, 2, lastRow, 2);
+        ws.getCell(firstRow, 1).alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+        ws.getCell(firstRow, 2).alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+      }
+      index = endIndex;
+    }
+    ws.autoFilter = { from: "A1", to: `N${entries.length + 1}` };
+    ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 };
+    ws.headerFooter.oddFooter = "永鴻消防器材行｜每日施工報表　&P / &N";
+    const photoResult = await addPhotoSheet(workbook, entries);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const suffix = selectedItem ? `_${selectedItem}` : "";
+    a.download = `永鴻消防施工日報_${today()}${suffix}.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    const photoMessage = photoResult.total
+      ? `照片 ${photoResult.total} 張，已嵌入 ${photoResult.count} 張${photoResult.failed ? `，另有 ${photoResult.failed} 張保留連結或未能嵌入` : ""}。`
+      : "本次紀錄沒有附加照片。";
+    setExportMessage(`Excel 已產生，共 ${entries.length} 筆明細。${photoMessage}`, photoResult.failed ? "" : "success");
+  } catch (err) {
+    console.error("Excel 匯出失敗", err);
+    setExportMessage(`匯出失敗：${err.message || err}。原始施工紀錄未受影響。`, "error");
+  } finally {
+    buttons.forEach(btn => btn.disabled = false);
+  }
+}
+
 async function loadStats() {
   if (!currentUser) return;
   $("statsTable").innerHTML = `<tr><td colspan="5">統計中…</td></tr>`;
@@ -630,6 +831,8 @@ function wireEvents() {
     loadRecords();
   });
   $("exportCsvBtn").addEventListener("click", exportCsv);
+  $("exportExcelBtn").addEventListener("click", () => exportExcel(false));
+  $("exportSingleItemExcelBtn").addEventListener("click", () => exportExcel(true));
   $("statsBtn").addEventListener("click", loadStats);
   $("recordsList").addEventListener("click", async event => {
     const btn = event.target.closest("button[data-action]");
