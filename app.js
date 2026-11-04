@@ -1001,6 +1001,21 @@ function wordReportTitle(title) {
       children: [new d.TextRun({ text: title, bold: true, size: 28, font: "Microsoft JhengHei", color: "14564B" })] })
   ];
 }
+function detectWordImageType(bytes, contentType) {
+  const type = String(contentType || "").split(";")[0].trim().toLowerCase();
+  // Prefer file signatures over HTTP metadata, which can occasionally be generic.
+  if (bytes && bytes.length >= 8 &&
+      bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47 &&
+      bytes[4] === 0x0D && bytes[5] === 0x0A && bytes[6] === 0x1A && bytes[7] === 0x0A) {
+    return { mimeType: "image/png", extension: "png" };
+  }
+  if (bytes && bytes.length >= 3 && bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+    return { mimeType: "image/jpeg", extension: "jpg" };
+  }
+  if (type === "image/png") return { mimeType: "image/png", extension: "png" };
+  if (type === "image/jpeg" || type === "image/jpg") return { mimeType: "image/jpeg", extension: "jpg" };
+  return null;
+}
 function getImageDimensions(bytes, mimeType) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
@@ -1016,7 +1031,6 @@ function getImageDimensions(bytes, mimeType) {
     image.src = url;
   });
 }
-
 async function exportEntryWord(entryId) {
   const d = window.docx;
   if (!d || !d.Document || !d.Packer || !d.ImageRun) {
@@ -1053,10 +1067,11 @@ async function exportEntryWord(entryId) {
         const response = await fetch(signed.data.signedUrl);
         if (!response.ok) throw new Error("照片下載失敗：HTTP " + response.status);
         const buffer = await response.arrayBuffer();
-        const mimeType = (response.headers.get("content-type") || "").split(";")[0].toLowerCase();
-        const extension = mimeType.includes("png") ? "png" : (mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "");
-        if (!extension) throw new Error("目前僅支援將 JPG/JPEG 或 PNG 照片嵌入 Word");
-        const bytes = new Uint8Array(buffer), dimensions = await getImageDimensions(bytes, mimeType);
+        const bytes = new Uint8Array(buffer);
+        const imageType = detectWordImageType(bytes, response.headers.get("content-type"));
+        if (!imageType) throw new Error("目前僅支援將 JPG/JPEG 或 PNG 照片嵌入 Word");
+        const dimensions = await getImageDimensions(bytes, imageType.mimeType);
+        const extension = imageType.extension;
         children.push(new d.Paragraph({ spacing: { before: 120, after: 80 }, children: [new d.TextRun({ text: "照片 " + (index + 1), bold: true, size: 20 })] }));
         children.push(new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 220 }, children: [new d.ImageRun({ data: bytes, transformation: dimensions, type: extension })] }));
         embedded++;
@@ -1137,10 +1152,11 @@ async function exportGroupWord(entryIds) {
           const response = await fetch(signed.data.signedUrl);
           if (!response.ok) throw new Error("照片下載失敗：HTTP " + response.status);
           const buffer = await response.arrayBuffer();
-          const mimeType = (response.headers.get("content-type") || "").split(";")[0].toLowerCase();
-          const extension = mimeType.includes("png") ? "png" : (mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "");
-          if (!extension) throw new Error("目前僅支援 JPG/JPEG 或 PNG");
-          const bytes = new Uint8Array(buffer), dimensions = await getImageDimensions(bytes, mimeType);
+          const bytes = new Uint8Array(buffer);
+          const imageType = detectWordImageType(bytes, response.headers.get("content-type"));
+          if (!imageType) throw new Error("目前僅支援 JPG/JPEG 或 PNG");
+          const dimensions = await getImageDimensions(bytes, imageType.mimeType);
+          const extension = imageType.extension;
           children.push(new d.Paragraph({ keepNext: true, spacing: { before: 160, after: 100 }, children: [
             new d.TextRun({ text: "照片 " + (i + 1) + "｜項目 " + (itemIndex + 1) + "：" + (entry.equipment_name || "") + "（項目照片 " + (photoIndex + 1) + "）", bold: true, size: 21, font: "Microsoft JhengHei", color: "14564B" })
           ] }));
