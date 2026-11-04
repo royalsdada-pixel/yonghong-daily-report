@@ -795,7 +795,7 @@ async function exportExcel(singleItem = false, entryId = null) {
     // 匯出時重新依目前畫面篩選條件讀取，避免使用者未按「套用篩選」而匯出舊結果。
     let entries = await fetchEntries(readFilters());
     if (entryId) entries = entries.filter(e => String(e.id) === String(entryId));
-    if (selectedSites.length) entries = entries.filter(e => selectedSites.includes(e.site_name));
+    if (!entryId && selectedSites.length) entries = entries.filter(e => selectedSites.includes(e.site_name));
     if (!entries.length) {
       setExportMessage("目前條件沒有可匯出的施工紀錄。", "error");
       return;
