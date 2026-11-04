@@ -15,3 +15,6 @@
 .work-item-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .work-item-heading h3{margin:0;color:var(--green-dark)}
 .work-item-heading .btn{padding:8px 10px;min-height:36px;font-size:13px}
+
+/* 同一天、同一施工場所的施工項目群組顯示 */
+.record-group-item{padding:10px 0 2px}.record-group-item h4{font-size:15px;line-height:1.45;margin:0 0 6px}.record-group-divider{border-top:1px solid var(--line);margin:10px 0}.record-group-card>.record-top{padding-bottom:10px;border-bottom:1px solid var(--line)}.record-group-export-actions{padding-top:4px}.record-group-item .record-actions button{font-size:13px;padding:9px 10px}
