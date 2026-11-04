@@ -530,6 +530,10 @@ function renderRecord(entry) {
     ${entry.notes ? `<p class="record-meta">備註：${escapeHtml(entry.notes)}</p>` : ""}
     ${Array.isArray(entry.photo_paths) && entry.photo_paths.length ? `<p class="record-meta">施工照片：${entry.photo_paths.length} 張（編輯紀錄可查看）</p>` : ""}
     ${isSupervisor() && entry.created_by_name ? `<p class="record-meta">填報人：${escapeHtml(entry.created_by_name)}</p>` : ""}
+    <div class="record-export-actions">
+      <button class="btn btn-secondary" data-action="export-excel" data-id="${escapeHtml(entry.id)}" type="button">匯出 Excel</button>
+      <button class="btn btn-secondary" data-action="export-word" data-id="${escapeHtml(entry.id)}" type="button">匯出 Word</button>
+    </div>
     ${editButtons}
   </article>`;
 }
@@ -680,7 +684,99 @@ async function addPhotoSheet(workbook, entries) {
   ws.autoFilter = { from: "A1", to: `F${Math.max(1, rowNum - 1)}` };
   return { count: embedded, failed, total: photos.length };
 }
-async function exportExcel(singleItem = false) {
+
+function wordText(label, value) {
+  const d = window.docx;
+  return new d.Paragraph({ spacing: { after: 120 }, children: [
+    new d.TextRun({ text: label + "：", bold: true, size: 22 }),
+    new d.TextRun({ text: String(value == null ? "未填寫" : value), size: 22 })
+  ]});
+}
+function getImageDimensions(bytes, mimeType) {
+  return new Promise(resolve => {
+    const blob = new Blob([bytes], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      const w = image.naturalWidth || 1, h = image.naturalHeight || 1;
+      URL.revokeObjectURL(url);
+      const scale = Math.min(460 / w, 320 / h, 1);
+      resolve({ width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) });
+    };
+    image.onerror = () => { URL.revokeObjectURL(url); resolve({ width: 400, height: 260 }); };
+    image.src = url;
+  });
+}
+async function exportEntryWord(entryId) {
+  const d = window.docx;
+  if (!d || !d.Document || !d.Packer || !d.ImageRun) {
+    setExportMessage("Word 匯出元件載入失敗，請重新整理頁面後再試。", "error"); return;
+  }
+  const entry = cachedEntries.find(item => String(item.id) === String(entryId));
+  if (!entry) { setExportMessage("找不到這筆施工紀錄，請重新整理紀錄後再試。", "error"); return; }
+  const buttons = [...document.querySelectorAll('button[data-action="export-word"]')].filter(button => String(button.dataset.id) === String(entryId));
+  buttons.forEach(button => button.disabled = true);
+  setExportMessage("正在製作 Word 施工紀錄並整理照片，請稍候…");
+  try {
+    const children = [
+      new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 100 }, children: [new d.TextRun({ text: "永鴻消防器材行", bold: true, size: 32, font: "Microsoft JhengHei" })] }),
+      new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 300 }, children: [new d.TextRun({ text: "施工紀錄單", bold: true, size: 28, font: "Microsoft JhengHei" })] }),
+      wordText("施工日期", entry.work_date),
+      wordText("施工場所", entry.site_name),
+      wordText("場所地址", entry.site_address || "未填寫"),
+      wordText("樓層／區域", entry.floor_area || "未填寫"),
+      wordText("施工項目", entry.equipment_name),
+      wordText("設備規格", entry.equipment_spec || "未填寫"),
+      wordText("施工方式", entry.work_type),
+      wordText("施工數量", String(entry.quantity == null ? "" : entry.quantity) + " " + (entry.unit || "")),
+      wordText("施工狀態", entry.status),
+      wordText("點位／編號", entry.point_name || "未填寫"),
+      wordText("備註", entry.notes || "無"),
+      wordText("施工照片數量", Array.isArray(entry.photo_paths) ? entry.photo_paths.length : 0),
+      new d.Paragraph({ spacing: { before: 240, after: 160 }, children: [new d.TextRun({ text: "施工照片", bold: true, size: 24, font: "Microsoft JhengHei" })] })
+    ];
+    let embedded = 0, failed = 0;
+    for (let index = 0; index < (Array.isArray(entry.photo_paths) ? entry.photo_paths.length : 0); index++) {
+      const path = entry.photo_paths[index];
+      try {
+        const signed = await supabaseClient.storage.from(PHOTO_BUCKET).createSignedUrl(path, 600);
+        if (signed.error || !signed.data || !signed.data.signedUrl) throw new Error((signed.error && signed.error.message) || "無法取得照片連結");
+        const response = await fetch(signed.data.signedUrl);
+        if (!response.ok) throw new Error("照片下載失敗：HTTP " + response.status);
+        const buffer = await response.arrayBuffer();
+        const mimeType = (response.headers.get("content-type") || "").split(";")[0].toLowerCase();
+        const extension = mimeType.includes("png") ? "png" : (mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "");
+        if (!extension) throw new Error("目前僅支援將 JPG/JPEG 或 PNG 照片嵌入 Word");
+        const bytes = new Uint8Array(buffer), dimensions = await getImageDimensions(bytes, mimeType);
+        children.push(new d.Paragraph({ spacing: { before: 120, after: 80 }, children: [new d.TextRun({ text: "照片 " + (index + 1), bold: true, size: 20 })] }));
+        children.push(new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 220 }, children: [new d.ImageRun({ data: bytes, transformation: dimensions, type: extension })] }));
+        embedded++;
+      } catch (error) {
+        failed++;
+        children.push(new d.Paragraph({ spacing: { after: 100 }, children: [new d.TextRun({ text: "照片 " + (index + 1) + " 未能嵌入：" + (error.message || "未知錯誤"), color: "AA3333", size: 18 })] }));
+      }
+    }
+    if (!entry.photo_paths || !entry.photo_paths.length) children.push(new d.Paragraph({ children: [new d.TextRun({ text: "本筆紀錄沒有附加施工照片。", size: 20 })] }));
+    children.push(new d.Paragraph({ spacing: { before: 300 }, children: [new d.TextRun({ text: "文件產生日期：" + today(), size: 18, color: "666666" })] }));
+    const doc = new d.Document({
+      creator: "永鴻消防器材行",
+      title: "施工紀錄_" + (entry.work_date || "") + "_" + (entry.site_name || ""),
+      description: "永鴻消防每日施工報表單筆施工紀錄",
+      sections: [{ properties: { page: { margin: { top: 720, right: 850, bottom: 720, left: 850 } } }, children }]
+    });
+    const blob = await d.Packer.toBlob(doc), url = URL.createObjectURL(blob), anchor = document.createElement("a");
+    anchor.href = url;
+    const filenamePart = value => String(value || "").replace(/[\\\\/:*?"<>|]/g, "_").slice(0, 60);
+    anchor.download = "永鴻消防施工紀錄_" + (entry.work_date || today()) + "_" + filenamePart(entry.site_name) + "_" + filenamePart(entry.equipment_name) + ".docx";
+    document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+    setExportMessage("Word 已產生：" + entry.site_name + "／" + entry.equipment_name + "。照片 " + ((entry.photo_paths && entry.photo_paths.length) || 0) + " 張，成功嵌入 " + embedded + " 張" + (failed ? "，另有 " + failed + " 張未能嵌入" : "") + "。", failed ? "" : "success");
+  } catch (error) {
+    console.error("Word 匯出失敗", error);
+    setExportMessage("Word 匯出失敗：" + (error.message || error) + "。原始施工紀錄未受影響。", "error");
+  } finally { buttons.forEach(button => button.disabled = false); }
+}
+
+async function exportExcel(singleItem = false, entryId = null) {
   if (!window.ExcelJS) {
     setExportMessage("Excel 匯出元件載入失敗，請重新整理頁面後再試。", "error");
     return;
@@ -698,6 +794,7 @@ async function exportExcel(singleItem = false) {
   try {
     // 匯出時重新依目前畫面篩選條件讀取，避免使用者未按「套用篩選」而匯出舊結果。
     let entries = await fetchEntries(readFilters());
+    if (entryId) entries = entries.filter(e => String(e.id) === String(entryId));
     if (selectedSites.length) entries = entries.filter(e => selectedSites.includes(e.site_name));
     if (!entries.length) {
       setExportMessage("目前條件沒有可匯出的施工紀錄。", "error");
@@ -769,8 +866,10 @@ async function exportExcel(singleItem = false) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const suffix = selectedSites.length ? `_${selectedSites.length === 1 ? selectedSites[0] : `選取${selectedSites.length}個場所`}` : "";
-    a.download = `永鴻消防施工日報_${today()}${suffix}.xlsx`;
+    const filenamePart = value => String(value || "").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+    const singleSuffix = entryId && entries[0] ? "_" + (entries[0].work_date || "") + "_" + filenamePart(entries[0].site_name) + "_" + filenamePart(entries[0].equipment_name) : "";
+    const suffix = singleSuffix || (selectedSites.length ? `_${selectedSites.length === 1 ? selectedSites[0] : `選取${selectedSites.length}個場所`}` : "");
+    a.download = `永鴻消防施工日報_${today()}${filenamePart(suffix)}.xlsx`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
     const photoMessage = photoResult.total
@@ -854,6 +953,8 @@ function wireEvents() {
     if (!entry) return;
     if (btn.dataset.action === "edit") startEdit(entry);
     if (btn.dataset.action === "delete") await deleteEntry(entry.id);
+    if (btn.dataset.action === "export-excel") await exportExcel(false, entry.id);
+    if (btn.dataset.action === "export-word") await exportEntryWord(entry.id);
   });
 }
 
