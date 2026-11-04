@@ -95,6 +95,7 @@ function showTab(name) {
   if (name === "records") loadRecords();
   if (name === "stats") loadStats();
   if (name === "catalog") showCatalogTab();
+  if (name === "siteCatalog") loadSiteCatalogManager();
 }
 
 function seedEquipmentSelects() {
@@ -130,6 +131,145 @@ async function loadEquipmentCatalog() {
   }
   seedEquipmentSelects();
   if (isSupervisor()) renderCatalogManager();
+}
+
+
+let siteCatalogAll = [];
+let siteCatalogManagerItems = [];
+
+async function loadSiteCatalog() {
+  const { data, error } = await supabaseClient.from("site_catalog")
+    .select("id,customer_name,display_name,site_name,site_address,default_floor_area,active,sort_order")
+    .eq("active", true).order("sort_order").order("display_name");
+  if (error) {
+    console.warn("施工地點清單讀取失敗：", error.message);
+    siteCatalogAll = [];
+  } else {
+    siteCatalogAll = data || [];
+  }
+  populateCustomerOptions();
+}
+function populateCustomerOptions(selectedCustomer = "") {
+  const customerSelect = $("customerName");
+  if (!customerSelect) return;
+  const customers = [...new Set(siteCatalogAll.map(item => item.customer_name))].sort((x,y) => x.localeCompare(y, "zh-Hant"));
+  customerSelect.innerHTML = '<option value="">請先選擇客戶</option>' +
+    customers.map(name => '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>').join("") +
+    '<option value="__manual__">其他／臨時客戶</option>';
+  if (selectedCustomer && [...customerSelect.options].some(option => option.value === selectedCustomer)) customerSelect.value = selectedCustomer;
+  populateSiteOptions();
+}
+function populateSiteOptions(selectedSiteName = "") {
+  const customer = $("customerName").value;
+  const siteSelect = $("siteCatalogSelect");
+  if (!siteSelect) return;
+  const items = siteCatalogAll.filter(item => item.customer_name === customer);
+  siteSelect.innerHTML = '<option value="">請選擇施工地點</option>' +
+    items.map(item => '<option value="' + escapeHtml(item.site_name) + '">' + escapeHtml(item.display_name) + '</option>').join("") +
+    '<option value="__manual__">其他／未建檔地點（手動輸入）</option>';
+  siteSelect.disabled = !customer;
+  if (selectedSiteName && [...siteSelect.options].some(option => option.value === selectedSiteName)) siteSelect.value = selectedSiteName;
+  else if (customer === "__manual__") siteSelect.value = "__manual__";
+  handleSiteSelection();
+}
+function handleSiteSelection() {
+  const customer = $("customerName").value;
+  const selected = $("siteCatalogSelect").value;
+  const manual = !customer || customer === "__manual__" || selected === "__manual__" || !selected;
+  $("manualSiteNameWrap").classList.toggle("hidden", !manual);
+  if (manual) {
+    if (selected !== "__manual__" && !selected) $("siteName").value = "";
+    if (customer === "__manual__") $("siteCatalogSelect").value = "__manual__";
+    return;
+  }
+  const item = siteCatalogAll.find(x => x.site_name === selected);
+  if (!item) return;
+  $("siteName").value = item.site_name;
+  $("siteAddress").value = item.site_address || "";
+  $("floorArea").value = item.default_floor_area || "";
+}
+async function loadSiteCatalogManager() {
+  if (!isSupervisor()) return;
+  const { data, error } = await supabaseClient.from("site_catalog")
+    .select("id,customer_name,display_name,site_name,site_address,default_floor_area,active,sort_order")
+    .order("sort_order").order("customer_name").order("display_name");
+  if (error) { setMessage("siteCatalogMessage", "讀取地點清單失敗：" + error.message, "error"); return; }
+  siteCatalogManagerItems = data || [];
+  renderSiteCatalogManager();
+}
+function renderSiteCatalogManager() {
+  const target = $("siteCatalogList");
+  if (!target || !isSupervisor()) return;
+  target.innerHTML = siteCatalogManagerItems.length ? siteCatalogManagerItems.map(item => `
+    <tr><td>${escapeHtml(item.customer_name)}</td><td>${escapeHtml(item.display_name)}</td>
+    <td>${escapeHtml(item.site_name)}</td><td>${escapeHtml(item.site_address || "")}</td>
+    <td>${item.active ? "啟用" : "停用"}</td><td>
+    <button class="btn btn-secondary" type="button" data-site-action="edit" data-id="${item.id}">編輯</button>
+    <button class="btn btn-secondary" type="button" data-site-action="toggle" data-id="${item.id}">${item.active ? "停用" : "啟用"}</button></td></tr>`).join("")
+    : '<tr><td colspan="6">尚無地點，請新增常用客戶與地點。</td></tr>';
+}
+function resetSiteCatalogForm() {
+  $("siteCatalogId").value = "";
+  $("siteCatalogCustomer").value = "";
+  $("siteCatalogDisplayName").value = "";
+  $("siteCatalogCanonicalName").value = "";
+  $("siteCatalogAddress").value = "";
+  $("siteCatalogFloor").value = "";
+  $("siteCatalogSort").value = "100";
+  $("siteCatalogActive").checked = true;
+  $("siteCatalogSaveBtn").textContent = "新增地點";
+  setMessage("siteCatalogMessage", "");
+}
+async function saveSiteCatalogItem(event) {
+  event.preventDefault();
+  if (!isSupervisor()) return;
+  const payload = {
+    customer_name: $("siteCatalogCustomer").value.trim(),
+    display_name: $("siteCatalogDisplayName").value.trim(),
+    site_name: $("siteCatalogCanonicalName").value.trim(),
+    site_address: $("siteCatalogAddress").value.trim() || null,
+    default_floor_area: $("siteCatalogFloor").value.trim() || null,
+    sort_order: Number($("siteCatalogSort").value || 100),
+    active: $("siteCatalogActive").checked,
+    updated_at: new Date().toISOString()
+  };
+  if (!payload.customer_name || !payload.display_name || !payload.site_name) {
+    setMessage("siteCatalogMessage", "請填寫客戶、顯示名稱及施工紀錄名稱。", "error"); return;
+  }
+  const id = $("siteCatalogId").value;
+  const result = id
+    ? await supabaseClient.from("site_catalog").update(payload).eq("id", Number(id))
+    : await supabaseClient.from("site_catalog").insert({ ...payload, created_by: currentUser.id });
+  if (result.error) {
+    setMessage("siteCatalogMessage", "儲存失敗：" + (result.error.message.includes("duplicate key") ? "此施工紀錄名稱或客戶顯示名稱已存在。" : result.error.message), "error"); return;
+  }
+  setMessage("siteCatalogMessage", id ? "地點已更新。" : "地點已新增。", "success");
+  resetSiteCatalogForm();
+  await loadSiteCatalogManager();
+  await loadSiteCatalog();
+}
+async function siteCatalogAction(event) {
+  const btn = event.target.closest("button[data-site-action]");
+  if (!btn || !isSupervisor()) return;
+  const item = siteCatalogManagerItems.find(x => String(x.id) === btn.dataset.id);
+  if (!item) return;
+  if (btn.dataset.siteAction === "edit") {
+    $("siteCatalogId").value = item.id;
+    $("siteCatalogCustomer").value = item.customer_name;
+    $("siteCatalogDisplayName").value = item.display_name;
+    $("siteCatalogCanonicalName").value = item.site_name;
+    $("siteCatalogAddress").value = item.site_address || "";
+    $("siteCatalogFloor").value = item.default_floor_area || "";
+    $("siteCatalogSort").value = item.sort_order ?? 100;
+    $("siteCatalogActive").checked = !!item.active;
+    $("siteCatalogSaveBtn").textContent = "儲存修改";
+    setMessage("siteCatalogMessage", "正在編輯：" + item.display_name);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } else if (btn.dataset.siteAction === "toggle") {
+    const { error } = await supabaseClient.from("site_catalog").update({ active: !item.active, updated_at: new Date().toISOString() }).eq("id", item.id);
+    if (error) setMessage("siteCatalogMessage", "更新失敗：" + error.message, "error");
+    else { await loadSiteCatalogManager(); await loadSiteCatalog(); }
+  }
 }
 
 let equipmentCatalogAll = [];
@@ -232,7 +372,9 @@ async function onSession(session) {
   try {
     await loadProfile(currentUser);
     await loadEquipmentCatalog();
+    await loadSiteCatalog();
     $("catalogTabBtn").classList.toggle("hidden", !isSupervisor());
+    $("siteCatalogTabBtn").classList.toggle("hidden", !isSupervisor());
     setLoggedInUI(true);
     setConnection("雲端已連線");
     await loadRecords();
@@ -400,6 +542,10 @@ function resetForm() {
   $("workDate").value = today();
   $("quantity").value = "1";
   $("status").value = "已完工";
+  $("siteName").value = "";
+  $("siteAddress").value = "";
+  $("floorArea").value = "";
+  populateCustomerOptions();
   updateSpecOptions();
   $("formTitle").textContent = "新增施工紀錄";
   $("saveBtn").textContent = "儲存施工紀錄";
@@ -413,6 +559,18 @@ function startEdit(entry) {
   $("siteName").value = entry.site_name || "";
   $("siteAddress").value = entry.site_address || "";
   $("floorArea").value = entry.floor_area || "";
+  const matchedSite = siteCatalogAll.find(item => item.site_name === entry.site_name);
+  if (matchedSite) {
+    $("customerName").value = matchedSite.customer_name;
+    populateSiteOptions(entry.site_name);
+    $("siteAddress").value = entry.site_address || matchedSite.site_address || "";
+    $("floorArea").value = entry.floor_area || matchedSite.default_floor_area || "";
+  } else {
+    $("customerName").value = "__manual__";
+    populateSiteOptions("__manual__");
+    $("siteCatalogSelect").value = "__manual__";
+    $("manualSiteNameWrap").classList.remove("hidden");
+  }
   if (![...$("equipmentName").options].some(o => o.value === entry.equipment_name)) {
     const option = document.createElement("option");
     option.value = entry.equipment_name; option.textContent = entry.equipment_name;
@@ -922,6 +1080,20 @@ function wireEvents() {
   $("catalogResetBtn").addEventListener("click", resetCatalogForm);
   $("catalogRefreshBtn").addEventListener("click", loadCatalogManager);
   $("catalogList").addEventListener("click", catalogAction);
+  $("siteCatalogForm").addEventListener("submit", saveSiteCatalogItem);
+  $("siteCatalogResetBtn").addEventListener("click", resetSiteCatalogForm);
+  $("siteCatalogRefreshBtn").addEventListener("click", loadSiteCatalogManager);
+  $("siteCatalogList").addEventListener("click", siteCatalogAction);
+  $("customerName").addEventListener("change", () => {
+    $("siteName").value = "";
+    $("siteAddress").value = "";
+    $("floorArea").value = "";
+    populateSiteOptions();
+  });
+  $("siteCatalogSelect").addEventListener("change", handleSiteSelection);
+  $("siteName").addEventListener("input", () => {
+    if ($("customerName").value === "__manual__" || $("siteCatalogSelect").value === "__manual__") return;
+  });
   $("logoutBtn").addEventListener("click", logout);
   $("entryForm").addEventListener("submit", saveEntry);
   $("equipmentName").addEventListener("change", updateSpecOptions);
