@@ -175,7 +175,7 @@ function populateSiteOptions(selectedSiteName = "") {
 function handleSiteSelection() {
   const customer = $("customerName").value;
   const selected = $("siteCatalogSelect").value;
-  const manual = !customer || customer === "__manual__" || selected === "__manual__" || !selected;
+  const manual = customer === "__manual__" || selected === "__manual__";
   $("manualSiteNameWrap").classList.toggle("hidden", !manual);
   if (manual) {
     if (selected !== "__manual__" && !selected) $("siteName").value = "";
