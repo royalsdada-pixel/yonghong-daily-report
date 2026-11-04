@@ -99,28 +99,59 @@ function showTab(name) {
   if (name === "customerCatalog") loadCustomerCatalogManager();
 }
 
+function getItemField(card, name) { return card.querySelector(`[data-field="${name}"]`); }
+function getSelectedEquipment(card) {
+  return equipmentCatalog.find(item => item.name === getItemField(card, "equipmentName")?.value) || null;
+}
+function updateSpecOptions(card, preferredSpec = "") {
+  if (!card) return;
+  const item = getSelectedEquipment(card), specs = Array.isArray(item?.specs) ? item.specs : [];
+  const select = getItemField(card, "equipmentSpec");
+  select.innerHTML = `<option value="">不適用／未指定</option>` + specs.map(spec => `<option value="${escapeHtml(spec)}">${escapeHtml(spec)}</option>`).join("");
+  if (preferredSpec && ![...select.options].some(o => o.value === preferredSpec)) select.add(new Option(preferredSpec, preferredSpec));
+  select.value = preferredSpec || "";
+  getItemField(card, "unit").value = item?.unit || getItemField(card, "unit").value || "";
+  getItemField(card, "specHelp").textContent = specs.length ? "規格依設備類別設定；需要時可於資料庫擴充。" : "此設備未設定規格，可留空。";
+}
+function refreshWorkItemTitles() {
+  const cards = [...document.querySelectorAll("#workItemsContainer .work-item-card")];
+  cards.forEach((card, index) => {
+    card.querySelector(".work-item-title").textContent = `項目 ${index + 1}`;
+    card.querySelector(".remove-work-item-btn").classList.toggle("hidden", cards.length === 1 || Boolean(editingId));
+  });
+}
+function addWorkItem(values = {}) {
+  const template = $("workItemTemplate");
+  const card = template.content.firstElementChild.cloneNode(true);
+  card._selectedPhotoFiles = [];
+  card._existingPhotoPaths = Array.isArray(values.photo_paths) ? [...values.photo_paths] : [];
+  const equipmentSelect = getItemField(card, "equipmentName");
+  equipmentSelect.innerHTML = equipmentCatalog.map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`).join("");
+  if (!equipmentCatalog.length) equipmentSelect.innerHTML = '<option value="">尚無設備資料</option>';
+  if (values.equipment_name && ![...equipmentSelect.options].some(o => o.value === values.equipment_name)) equipmentSelect.add(new Option(values.equipment_name, values.equipment_name));
+  equipmentSelect.value = values.equipment_name || equipmentSelect.options[0]?.value || "";
+  updateSpecOptions(card, values.equipment_spec || "");
+  getItemField(card, "workType").value = values.work_type || "移置";
+  getItemField(card, "quantity").value = values.quantity ?? 1;
+  getItemField(card, "unit").value = values.unit || getSelectedEquipment(card)?.unit || "具";
+  getItemField(card, "status").value = values.status || "已完工";
+  getItemField(card, "pointName").value = values.point_name || "";
+  getItemField(card, "notes").value = values.notes || "";
+  $("workItemsContainer").appendChild(card);
+  if (card._existingPhotoPaths.length) renderExistingPhotos(card._existingPhotoPaths, getItemField(card, "existingPhotos"));
+  refreshWorkItemTitles();
+  return card;
+}
 function seedEquipmentSelects() {
-  const select = $("equipmentName");
-  select.innerHTML = equipmentCatalog.map(item =>
-    `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`
-  ).join("");
-  if (!equipmentCatalog.length) {
-    select.innerHTML = `<option value="">尚無設備資料</option>`;
-  }
-  updateSpecOptions();
+  document.querySelectorAll("#workItemsContainer .work-item-card").forEach(card => {
+    const select = getItemField(card, "equipmentName"), previous = select.value;
+    select.innerHTML = equipmentCatalog.map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`).join("");
+    if (!equipmentCatalog.length) select.innerHTML = '<option value="">尚無設備資料</option>';
+    if (previous && ![...select.options].some(o => o.value === previous)) select.add(new Option(previous, previous));
+    select.value = previous || select.options[0]?.value || "";
+    updateSpecOptions(card, getItemField(card, "equipmentSpec").value);
+  });
 }
-function getSelectedEquipment() {
-  return equipmentCatalog.find(item => item.name === $("equipmentName").value) || null;
-}
-function updateSpecOptions() {
-  const item = getSelectedEquipment();
-  const specs = Array.isArray(item?.specs) ? item.specs : [];
-  $("equipmentSpec").innerHTML = `<option value="">不適用／未指定</option>` +
-    specs.map(spec => `<option value="${escapeHtml(spec)}">${escapeHtml(spec)}</option>`).join("");
-  $("unit").value = item?.unit || "";
-  $("specHelp").textContent = specs.length ? "規格依設備類別設定；需要時可於資料庫擴充。" : "此設備未設定規格，可留空。";
-}
-
 async function loadEquipmentCatalog() {
   const { data, error } = await supabaseClient.from("equipment_catalog")
     .select("id,category,name,specs,unit,active,sort_order").eq("active", true).order("sort_order").order("name");
@@ -561,32 +592,28 @@ function safeFileName(name) {
   const cleaned = String(name || "photo").normalize("NFKC").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-90);
   return cleaned || "photo";
 }
-function renderLocalPhotoPreview() {
-  const preview = $("photoPreview");
+function renderLocalPhotoPreview(card) {
+  const preview = getItemField(card, "photoPreview");
   preview.innerHTML = "";
-  selectedPhotoFiles.forEach((file, index) => {
-    const url = URL.createObjectURL(file);
-    const item = document.createElement("div");
+  card._selectedPhotoFiles.forEach((file, index) => {
+    const url = URL.createObjectURL(file), item = document.createElement("div");
     item.className = "photo-item";
-    item.innerHTML = `<img alt="待上傳施工照片"><button class="photo-remove" type="button" aria-label="移除照片">×</button><div class="photo-caption"></div>`;
+    item.innerHTML = '<img alt="待上傳施工照片"><button class="photo-remove" type="button" aria-label="移除照片">×</button><div class="photo-caption"></div>';
     item.querySelector("img").src = url;
     item.querySelector(".photo-caption").textContent = file.name;
     item.querySelector("button").addEventListener("click", () => {
       URL.revokeObjectURL(url);
-      selectedPhotoFiles.splice(index, 1);
-      renderLocalPhotoPreview();
+      card._selectedPhotoFiles.splice(index, 1);
+      renderLocalPhotoPreview(card);
     });
     preview.appendChild(item);
   });
 }
-async function renderExistingPhotos(paths) {
-  const container = $("existingPhotos");
+async function renderExistingPhotos(paths, container) {
   container.innerHTML = "";
   if (!paths?.length || !supabaseClient) return;
   const heading = document.createElement("div");
-  heading.className = "muted small";
-  heading.textContent = "已儲存的施工照片";
-  container.appendChild(heading);
+  heading.className = "muted small"; heading.textContent = "已儲存的施工照片"; container.appendChild(heading);
   for (const path of paths) {
     const { data, error } = await supabaseClient.storage.from(PHOTO_BUCKET).createSignedUrl(path, 604800);
     if (error || !data?.signedUrl) continue;
@@ -597,9 +624,9 @@ async function renderExistingPhotos(paths) {
     container.appendChild(wrap);
   }
 }
-async function uploadSelectedPhotos(entryId) {
+async function uploadSelectedPhotos(entryId, files) {
   const uploaded = [];
-  for (const file of selectedPhotoFiles) {
+  for (const file of files) {
     if (!file.type.startsWith("image/")) throw new Error(`「${file.name}」不是圖片檔。`);
     if (file.size > MAX_PHOTO_BYTES) throw new Error(`「${file.name}」超過 8 MB，請先縮小照片。`);
     const path = `${currentUser.id}/${entryId}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
@@ -612,24 +639,17 @@ async function uploadSelectedPhotos(entryId) {
 
 function resetForm() {
   editingId = null;
-  existingPhotoPaths = [];
-  selectedPhotoFiles = [];
-  $("photoFiles").value = "";
-  $("photoPreview").innerHTML = "";
-  $("existingPhotos").innerHTML = "";
   $("entryId").value = "";
   $("entryForm").reset();
   $("workDate").value = today();
-  $("quantity").value = "1";
-  $("status").value = "已完工";
-  $("siteName").value = "";
-  $("siteAddress").value = "";
-  $("floorArea").value = "";
+  $("siteName").value = ""; $("siteAddress").value = ""; $("floorArea").value = "";
+  $("workItemsContainer").innerHTML = "";
   populateCustomerOptions();
-  updateSpecOptions();
+  addWorkItem();
   $("formTitle").textContent = "新增施工紀錄";
   $("saveBtn").textContent = "儲存施工紀錄";
   $("cancelEditBtn").classList.add("hidden");
+  $("addWorkItemBtn").classList.remove("hidden");
   setMessage("entryMessage", "");
 }
 function startEdit(entry) {
@@ -651,130 +671,91 @@ function startEdit(entry) {
     $("siteCatalogSelect").value = "__manual__";
     $("manualSiteNameWrap").classList.remove("hidden");
   }
-  if (![...$("equipmentName").options].some(o => o.value === entry.equipment_name)) {
-    const option = document.createElement("option");
-    option.value = entry.equipment_name; option.textContent = entry.equipment_name;
-    $("equipmentName").appendChild(option);
-  }
-  $("equipmentName").value = entry.equipment_name;
-  updateSpecOptions();
-  if (entry.equipment_spec && ![...$("equipmentSpec").options].some(o => o.value === entry.equipment_spec)) {
-    const option = document.createElement("option");
-    option.value = entry.equipment_spec; option.textContent = entry.equipment_spec;
-    $("equipmentSpec").appendChild(option);
-  }
-  $("equipmentSpec").value = entry.equipment_spec || "";
-  $("workType").value = entry.work_type;
-  $("quantity").value = entry.quantity;
-  $("unit").value = entry.unit || "";
-  $("status").value = entry.status;
-  $("pointName").value = entry.point_name || "";
-  $("notes").value = entry.notes || "";
-  existingPhotoPaths = Array.isArray(entry.photo_paths) ? [...entry.photo_paths] : [];
-  selectedPhotoFiles = [];
-  $("photoFiles").value = "";
-  $("photoPreview").innerHTML = "";
-  renderExistingPhotos(existingPhotoPaths);
+  $("workItemsContainer").innerHTML = "";
+  addWorkItem(entry);
   $("formTitle").textContent = "修改施工紀錄";
   $("saveBtn").textContent = "儲存修改";
   $("cancelEditBtn").classList.remove("hidden");
+  $("addWorkItemBtn").classList.add("hidden");
   setMessage("entryMessage", "正在修改既有紀錄。");
   showTab("entry");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
-
 async function saveEntry(event) {
   event.preventDefault();
   if (!currentUser) return;
-  const payload = {
+  const cards = [...document.querySelectorAll("#workItemsContainer .work-item-card")];
+  const common = {
     work_date: $("workDate").value, site_name: $("siteName").value.trim(),
-    site_address: $("siteAddress").value.trim() || null, floor_area: $("floorArea").value.trim() || null,
-    equipment_name: $("equipmentName").value, equipment_spec: $("equipmentSpec").value || null,
-    work_type: $("workType").value, quantity: Number($("quantity").value), unit: $("unit").value.trim(),
-    status: $("status").value, point_name: $("pointName").value.trim() || null, notes: $("notes").value.trim() || null
+    site_address: $("siteAddress").value.trim() || null, floor_area: $("floorArea").value.trim() || null
   };
-  if (!payload.site_name || !payload.equipment_name || !payload.work_date || !(payload.quantity > 0) || !payload.unit) {
-    setMessage("entryMessage", "請確認日期、場所、設備、正確數量及單位。", "error"); return;
+  if (!common.site_name || !common.work_date || !cards.length) {
+    setMessage("entryMessage", "請確認施工日期、施工場所及至少一個施工項目。", "error"); return;
+  }
+  const payloads = [];
+  for (let i = 0; i < cards.length; i++) {
+    const card = cards[i];
+    const payload = {
+      ...common,
+      equipment_name: getItemField(card, "equipmentName").value,
+      equipment_spec: getItemField(card, "equipmentSpec").value || null,
+      work_type: getItemField(card, "workType").value,
+      quantity: Number(getItemField(card, "quantity").value),
+      unit: getItemField(card, "unit").value.trim(),
+      status: getItemField(card, "status").value,
+      point_name: getItemField(card, "pointName").value.trim() || null,
+      notes: getItemField(card, "notes").value.trim() || null
+    };
+    if (!payload.equipment_name || !(payload.quantity > 0) || !payload.unit) {
+      setMessage("entryMessage", `請檢查項目 ${i + 1}：設備、正確數量及計量單位皆為必填。`, "error"); return;
+    }
+    payloads.push(payload);
   }
   $("saveBtn").disabled = true;
-  setMessage("entryMessage", "正在儲存施工紀錄…");
-  let entryId = editingId;
-  let result;
-  if (editingId) result = await supabaseClient.from("work_entries").update(payload).eq("id", editingId).select("id").single();
-  else {
-    result = await supabaseClient.from("work_entries").insert({ ...payload, created_by: currentUser.id }).select("id").single();
-    entryId = result.data?.id || null;
-  }
-  if (result.error || !entryId) {
-    $("saveBtn").disabled = false;
-    setMessage("entryMessage", `儲存失敗：${result.error?.message || "無法取得施工紀錄編號"}`, "error"); return;
-  }
+  setMessage("entryMessage", editingId ? "正在儲存修改…" : `正在儲存 ${payloads.length} 個施工項目…`);
   try {
-    if (selectedPhotoFiles.length) {
-      setMessage("entryMessage", "施工紀錄已儲存，正在上傳照片…");
-      const uploadedPaths = await uploadSelectedPhotos(entryId);
-      const nextPaths = [...existingPhotoPaths, ...uploadedPaths];
-      const { error: photoDbError } = await supabaseClient.from("work_entries").update({ photo_paths: nextPaths }).eq("id", entryId);
-      if (photoDbError) throw new Error(`照片已上傳，但更新照片清單失敗：${photoDbError.message}`);
-      existingPhotoPaths = nextPaths;
+    let savedRows = [];
+    if (editingId) {
+      const { data, error } = await supabaseClient.from("work_entries").update(payloads[0]).eq("id", editingId).select("id").single();
+      if (error || !data?.id) throw new Error(`儲存失敗：${error?.message || "無法取得施工紀錄編號"}`);
+      savedRows = [{ id: data.id }];
+    } else {
+      const rows = payloads.map(payload => ({ ...payload, created_by: currentUser.id }));
+      const { data, error } = await supabaseClient.from("work_entries").insert(rows).select("id");
+      if (error || !data || data.length !== rows.length) throw new Error(`儲存失敗：${error?.message || "無法確認所有施工項目"}`);
+      savedRows = data;
+    }
+    let photoWarnings = [];
+    for (let i = 0; i < savedRows.length; i++) {
+      const card = cards[i], id = savedRows[i].id;
+      const newFiles = card._selectedPhotoFiles || [];
+      if (newFiles.length) {
+        try {
+          setMessage("entryMessage", `施工項目 ${i + 1}/${savedRows.length} 已儲存，正在上傳照片…`);
+          const uploaded = await uploadSelectedPhotos(id, newFiles);
+          const paths = [...(editingId ? card._existingPhotoPaths || [] : []), ...uploaded];
+          const { error } = await supabaseClient.from("work_entries").update({ photo_paths: paths }).eq("id", id);
+          if (error) throw new Error(error.message);
+        } catch (photoError) {
+          photoWarnings.push(`項目 ${i + 1}：${photoError.message}`);
+        }
+      }
     }
     $("saveBtn").disabled = false;
-    setMessage("entryMessage", editingId ? "修改已儲存。" : "施工紀錄已儲存至雲端。", "success");
-    resetForm(); await loadRecords();
+    if (photoWarnings.length) {
+      setMessage("entryMessage", `施工紀錄已儲存，但部分照片需要檢查：${photoWarnings.join("；")}`, "error");
+      await loadRecords();
+    } else {
+      setMessage("entryMessage", editingId ? "修改已儲存。" : `已成功儲存 ${savedRows.length} 個施工項目。`, "success");
+      resetForm(); await loadRecords();
+    }
   } catch (err) {
     $("saveBtn").disabled = false;
-    setMessage("entryMessage", `${err.message} 施工紀錄本身已保存，請檢查後再重試照片。`, "error");
+    setMessage("entryMessage", err.message, "error");
     await loadRecords();
   }
 }
 
-function readFilters(prefix = "filter") {
-  if (prefix === "stats") return { from: $("statsFrom").value, to: $("statsTo").value };
-  return {
-    from: $("filterFrom").value, to: $("filterTo").value,
-    site: $("filterSite").value.trim().toLowerCase(),
-    workType: $("filterWorkType").value, status: $("filterStatus").value
-  };
-}
-async function fetchEntries(filters = readFilters()) {
-  let query = supabaseClient.from("work_entries").select("*").order("work_date", { ascending: false }).order("created_at", { ascending: false }).limit(2000);
-  if (filters.from) query = query.gte("work_date", filters.from);
-  if (filters.to) query = query.lte("work_date", filters.to);
-  if (filters.workType) query = query.eq("work_type", filters.workType);
-  if (filters.status) query = query.eq("status", filters.status);
-  const { data, error } = await query;
-  if (error) throw error;
-  let rows = data || [];
-  if (filters.site) rows = rows.filter(r => (r.site_name || "").toLowerCase().includes(filters.site));
-  return rows;
-}
-function canEdit(entry) { return isSupervisor() || entry.created_by === currentUser?.id; }
-function renderRecord(entry) {
-  const statusClass = entry.status === "已完工" ? "status-done" : entry.status === "施工中" ? "status-progress" : "status-pending";
-  const editButtons = canEdit(entry) ? `
-    <div class="record-actions">
-      <button class="btn btn-secondary" data-action="edit" data-id="${escapeHtml(entry.id)}" type="button">修改</button>
-      <button class="btn btn-secondary" data-action="delete" data-id="${escapeHtml(entry.id)}" type="button">刪除</button>
-    </div>` : "";
-  return `<article class="record-card">
-    <div class="record-top">
-      <div><h3>${escapeHtml(entry.site_name)}</h3><div class="record-meta">${escapeHtml(entry.work_date)}${entry.floor_area ? " · " + escapeHtml(entry.floor_area) : ""}</div></div>
-      <div class="record-quantity">${escapeHtml(entry.quantity)} ${escapeHtml(entry.unit)}</div>
-    </div>
-    <p><strong>${escapeHtml(entry.equipment_name)}</strong>${entry.equipment_spec ? " · " + escapeHtml(entry.equipment_spec) : ""}</p>
-    <p class="record-meta">施工方式：${escapeHtml(entry.work_type)}　<span class="pill ${statusClass}">${escapeHtml(entry.status)}</span></p>
-    ${entry.point_name ? `<p class="record-meta">點位：${escapeHtml(entry.point_name)}</p>` : ""}
-    ${entry.site_address ? `<p class="record-meta">地址：${escapeHtml(entry.site_address)}</p>` : ""}
-    ${entry.notes ? `<p class="record-meta">備註：${escapeHtml(entry.notes)}</p>` : ""}
-    ${Array.isArray(entry.photo_paths) && entry.photo_paths.length ? `<p class="record-meta">施工照片：${entry.photo_paths.length} 張（編輯紀錄可查看）</p>` : ""}
-    ${isSupervisor() && entry.created_by_name ? `<p class="record-meta">填報人：${escapeHtml(entry.created_by_name)}</p>` : ""}
-    <div class="record-export-actions">
-      <button class="btn btn-secondary" data-action="export-excel" data-id="${escapeHtml(entry.id)}" type="button">匯出 Excel</button>
-      <button class="btn btn-secondary" data-action="export-word" data-id="${escapeHtml(entry.id)}" type="button">匯出 Word</button>
-    </div>
-    ${editButtons}
-  </article>`;
-}
 async function loadRecords() {
   if (!currentUser || !currentProfile) return;
   $("recordsList").innerHTML = `<p class="muted">載入中…</p>`;
@@ -1180,13 +1161,27 @@ function wireEvents() {
   });
   $("logoutBtn").addEventListener("click", logout);
   $("entryForm").addEventListener("submit", saveEntry);
-  $("equipmentName").addEventListener("change", updateSpecOptions);
-  $("photoFiles").addEventListener("change", event => {
-    const newFiles = [...(event.target.files || [])];
-    const invalid = newFiles.find(file => !file.type.startsWith("image/") || file.size > MAX_PHOTO_BYTES);
-    if (invalid) { alert(`照片「${invalid.name}」格式不支援或超過 8 MB。請選擇圖片且每張不超過 8 MB。`); event.target.value = ""; return; }
-    selectedPhotoFiles = [...selectedPhotoFiles, ...newFiles];
-    event.target.value = ""; renderLocalPhotoPreview();
+  addWorkItem();
+  $("addWorkItemBtn").addEventListener("click", () => addWorkItem());
+  $("workItemsContainer").addEventListener("change", event => {
+    const card = event.target.closest(".work-item-card");
+    if (!card) return;
+    const field = event.target.dataset.field;
+    if (field === "equipmentName") updateSpecOptions(card);
+    if (field === "photoFiles") {
+      const files = [...(event.target.files || [])];
+      const invalid = files.find(file => !file.type.startsWith("image/") || file.size > MAX_PHOTO_BYTES);
+      if (invalid) { alert(`照片「${invalid.name}」格式不支援或超過 8 MB。請選擇圖片且每張不超過 8 MB。`); event.target.value = ""; return; }
+      card._selectedPhotoFiles = [...(card._selectedPhotoFiles || []), ...files];
+      event.target.value = ""; renderLocalPhotoPreview(card);
+    }
+  });
+  $("workItemsContainer").addEventListener("click", event => {
+    const btn = event.target.closest(".remove-work-item-btn");
+    if (!btn) return;
+    const card = btn.closest(".work-item-card");
+    (card._selectedPhotoFiles || []).forEach(file => void file);
+    card.remove(); refreshWorkItemTitles();
   });
   $("cancelEditBtn").addEventListener("click", resetForm);
   document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
