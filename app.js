@@ -721,10 +721,14 @@ async function saveEntry(event) {
       if (error || !data?.id) throw new Error(`儲存失敗：${error?.message || "無法取得施工紀錄編號"}`);
       savedRows = [{ id: data.id }];
     } else {
-      const rows = payloads.map(payload => ({ ...payload, created_by: currentUser.id }));
+      // 先由前端為每個項目指定 UUID，確保回傳順序不影響照片對應的施工紀錄。
+      const rows = payloads.map(payload => ({ id: crypto.randomUUID(), ...payload, created_by: currentUser.id }));
       const { data, error } = await supabaseClient.from("work_entries").insert(rows).select("id");
-      if (error || !data || data.length !== rows.length) throw new Error(`儲存失敗：${error?.message || "無法確認所有施工項目"}`);
-      savedRows = data;
+      const returnedIds = new Set((data || []).map(row => row.id));
+      if (error || returnedIds.size !== rows.length || rows.some(row => !returnedIds.has(row.id))) {
+        throw new Error(`儲存失敗：${error?.message || "無法確認所有施工項目"}`);
+      }
+      savedRows = rows.map(row => ({ id: row.id }));
     }
     let photoWarnings = [];
     for (let i = 0; i < savedRows.length; i++) {
