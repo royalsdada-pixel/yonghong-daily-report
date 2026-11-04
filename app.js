@@ -1056,7 +1056,7 @@ async function exportEntryWord(entryId) {
       wordText("點位／編號", entry.point_name || "未填寫"),
       wordText("備註", entry.notes || "無"),
       wordText("施工照片數量", Array.isArray(entry.photo_paths) ? entry.photo_paths.length : 0),
-      new d.Paragraph({ pageBreakBefore: true, spacing: { before: 240, after: 160 }, children: [new d.TextRun({ text: "施工照片附件", bold: true, size: 26, font: "Microsoft JhengHei", color: "14564B" })] })
+      new d.Paragraph({ pageBreakBefore: Array.isArray(entry.photo_paths) && entry.photo_paths.length > 0, spacing: { before: 240, after: 160 }, children: [new d.TextRun({ text: "施工照片附件", bold: true, size: 26, font: "Microsoft JhengHei", color: "14564B" })] })
     ];
     let embedded = 0, failed = 0;
     for (let index = 0; index < (Array.isArray(entry.photo_paths) ? entry.photo_paths.length : 0); index++) {
