@@ -1016,16 +1016,36 @@ function detectWordImageType(bytes, contentType) {
   if (type === "image/jpeg" || type === "image/jpg") return { mimeType: "image/jpeg", extension: "jpg" };
   return null;
 }
-function getImageDimensions(bytes, mimeType) {
+function prepareWordImage(bytes, mimeType) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
     const image = new Image();
     image.onload = () => {
-      const w = image.naturalWidth, h = image.naturalHeight;
       URL.revokeObjectURL(url);
+      const w = image.naturalWidth, h = image.naturalHeight;
       if (!w || !h) return reject(new Error("無法判讀照片原始尺寸"));
-      const scale = Math.min(440 / w, 560 / h, 1);
-      resolve({ width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) });
+      // Bake EXIF orientation into pixels because Word may ignore the source orientation metadata.
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const context = canvas.getContext("2d");
+      if (!context) return reject(new Error("無法正規化照片方向"));
+      context.drawImage(image, 0, 0, w, h);
+      const outputType = mimeType === "image/png" ? "image/png" : "image/jpeg";
+      canvas.toBlob(blob => {
+        if (!blob) return reject(new Error("無法正規化照片方向"));
+        blob.arrayBuffer().then(buffer => {
+          const scale = Math.min(440 / w, 560 / h, 1);
+          resolve({
+            bytes: new Uint8Array(buffer),
+            extension: outputType === "image/png" ? "png" : "jpg",
+            dimensions: {
+              width: Math.max(1, Math.round(w * scale)),
+              height: Math.max(1, Math.round(h * scale))
+            }
+          });
+        }).catch(() => reject(new Error("無法處理照片資料")));
+      }, outputType, outputType === "image/jpeg" ? 0.92 : undefined);
     };
     image.onerror = () => { URL.revokeObjectURL(url); reject(new Error("無法讀取照片尺寸，為避免變形已略過嵌入")); };
     image.src = url;
@@ -1070,10 +1090,11 @@ async function exportEntryWord(entryId) {
         const bytes = new Uint8Array(buffer);
         const imageType = detectWordImageType(bytes, response.headers.get("content-type"));
         if (!imageType) throw new Error("目前僅支援將 JPG/JPEG 或 PNG 照片嵌入 Word");
-        const dimensions = await getImageDimensions(bytes, imageType.mimeType);
-        const extension = imageType.extension;
+        const preparedImage = await prepareWordImage(bytes, imageType.mimeType);
+        const dimensions = preparedImage.dimensions;
+        const extension = preparedImage.extension;
         children.push(new d.Paragraph({ spacing: { before: 120, after: 80 }, children: [new d.TextRun({ text: "照片 " + (index + 1), bold: true, size: 20 })] }));
-        children.push(new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 220 }, children: [new d.ImageRun({ data: bytes, transformation: dimensions, type: extension })] }));
+        children.push(new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 220 }, children: [new d.ImageRun({ data: preparedImage.bytes, transformation: dimensions, type: extension })] }));
         embedded++;
       } catch (error) {
         failed++;
@@ -1155,13 +1176,14 @@ async function exportGroupWord(entryIds) {
           const bytes = new Uint8Array(buffer);
           const imageType = detectWordImageType(bytes, response.headers.get("content-type"));
           if (!imageType) throw new Error("目前僅支援 JPG/JPEG 或 PNG");
-          const dimensions = await getImageDimensions(bytes, imageType.mimeType);
-          const extension = imageType.extension;
+          const preparedImage = await prepareWordImage(bytes, imageType.mimeType);
+        const dimensions = preparedImage.dimensions;
+          const extension = preparedImage.extension;
           children.push(new d.Paragraph({ keepNext: true, spacing: { before: 160, after: 100 }, children: [
             new d.TextRun({ text: "照片 " + (i + 1) + "｜項目 " + (itemIndex + 1) + "：" + (entry.equipment_name || "") + "（項目照片 " + (photoIndex + 1) + "）", bold: true, size: 21, font: "Microsoft JhengHei", color: "14564B" })
           ] }));
           children.push(new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 260 }, children: [
-            new d.ImageRun({ data: bytes, transformation: dimensions, type: extension })
+            new d.ImageRun({ data: preparedImage.bytes, transformation: dimensions, type: extension })
           ] }));
           embedded++;
         } catch (error) {
