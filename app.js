@@ -743,6 +743,7 @@ async function saveEntry(event) {
     }
     $("saveBtn").disabled = false;
     if (photoWarnings.length) {
+      resetForm();
       setMessage("entryMessage", `施工紀錄已儲存，但部分照片需要檢查：${photoWarnings.join("；")}`, "error");
       await loadRecords();
     } else {
