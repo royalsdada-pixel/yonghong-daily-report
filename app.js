@@ -980,23 +980,54 @@ async function addPhotoSheet(workbook, entries) {
 
 function wordText(label, value) {
   const d = window.docx;
-  return new d.Paragraph({ spacing: { after: 120 }, children: [
-    new d.TextRun({ text: label + "：", bold: true, size: 22 }),
-    new d.TextRun({ text: String(value == null ? "未填寫" : value), size: 22 })
+  return new d.Paragraph({ spacing: { after: 100, line: 280 }, children: [
+    new d.TextRun({ text: label + "：", bold: true, size: 21, font: "Microsoft JhengHei", color: "18332F" }),
+    new d.TextRun({ text: String(value == null || value === "" ? "未填寫" : value), size: 21, font: "Microsoft JhengHei", color: "263A36" })
   ]});
 }
+function wordSectionTitle(text, pageBreakBefore = false) {
+  const d = window.docx;
+  return new d.Paragraph({ heading: d.HeadingLevel.HEADING_1, pageBreakBefore,
+    spacing: { before: 220, after: 140 },
+    children: [new d.TextRun({ text, bold: true, size: 26, font: "Microsoft JhengHei", color: "14564B" })]
+  });
+}
+function wordReportTitle(title) {
+  const d = window.docx;
+  return [
+    new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 100 },
+      children: [new d.TextRun({ text: "永鴻消防器材行", bold: true, size: 34, font: "Microsoft JhengHei", color: "103F37" })] }),
+    new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 260 },
+      children: [new d.TextRun({ text: title, bold: true, size: 28, font: "Microsoft JhengHei", color: "14564B" })] })
+  ];
+}
+function detectWordImageType(bytes, contentType) {
+  const type = String(contentType || "").split(";")[0].trim().toLowerCase();
+  // Prefer file signatures over HTTP metadata, which can occasionally be generic.
+  if (bytes && bytes.length >= 8 &&
+      bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47 &&
+      bytes[4] === 0x0D && bytes[5] === 0x0A && bytes[6] === 0x1A && bytes[7] === 0x0A) {
+    return { mimeType: "image/png", extension: "png" };
+  }
+  if (bytes && bytes.length >= 3 && bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+    return { mimeType: "image/jpeg", extension: "jpg" };
+  }
+  if (type === "image/png") return { mimeType: "image/png", extension: "png" };
+  if (type === "image/jpeg" || type === "image/jpg") return { mimeType: "image/jpeg", extension: "jpg" };
+  return null;
+}
 function getImageDimensions(bytes, mimeType) {
-  return new Promise(resolve => {
-    const blob = new Blob([bytes], { type: mimeType });
-    const url = URL.createObjectURL(blob);
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
     const image = new Image();
     image.onload = () => {
-      const w = image.naturalWidth || 1, h = image.naturalHeight || 1;
+      const w = image.naturalWidth, h = image.naturalHeight;
       URL.revokeObjectURL(url);
-      const scale = Math.min(460 / w, 320 / h, 1);
+      if (!w || !h) return reject(new Error("無法判讀照片原始尺寸"));
+      const scale = Math.min(440 / w, 560 / h, 1);
       resolve({ width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) });
     };
-    image.onerror = () => { URL.revokeObjectURL(url); resolve({ width: 400, height: 260 }); };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error("無法讀取照片尺寸，為避免變形已略過嵌入")); };
     image.src = url;
   });
 }
@@ -1012,8 +1043,7 @@ async function exportEntryWord(entryId) {
   setExportMessage("正在製作 Word 施工紀錄並整理照片，請稍候…");
   try {
     const children = [
-      new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 100 }, children: [new d.TextRun({ text: "永鴻消防器材行", bold: true, size: 32, font: "Microsoft JhengHei" })] }),
-      new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 300 }, children: [new d.TextRun({ text: "施工紀錄單", bold: true, size: 28, font: "Microsoft JhengHei" })] }),
+      ...wordReportTitle("施工紀錄單"),
       wordText("施工日期", entry.work_date),
       wordText("施工場所", entry.site_name),
       wordText("場所地址", entry.site_address || "未填寫"),
@@ -1026,7 +1056,7 @@ async function exportEntryWord(entryId) {
       wordText("點位／編號", entry.point_name || "未填寫"),
       wordText("備註", entry.notes || "無"),
       wordText("施工照片數量", Array.isArray(entry.photo_paths) ? entry.photo_paths.length : 0),
-      new d.Paragraph({ spacing: { before: 240, after: 160 }, children: [new d.TextRun({ text: "施工照片", bold: true, size: 24, font: "Microsoft JhengHei" })] })
+      new d.Paragraph({ pageBreakBefore: Array.isArray(entry.photo_paths) && entry.photo_paths.length > 0, spacing: { before: 240, after: 160 }, children: [new d.TextRun({ text: "施工照片附件", bold: true, size: 26, font: "Microsoft JhengHei", color: "14564B" })] })
     ];
     let embedded = 0, failed = 0;
     for (let index = 0; index < (Array.isArray(entry.photo_paths) ? entry.photo_paths.length : 0); index++) {
@@ -1037,10 +1067,11 @@ async function exportEntryWord(entryId) {
         const response = await fetch(signed.data.signedUrl);
         if (!response.ok) throw new Error("照片下載失敗：HTTP " + response.status);
         const buffer = await response.arrayBuffer();
-        const mimeType = (response.headers.get("content-type") || "").split(";")[0].toLowerCase();
-        const extension = mimeType.includes("png") ? "png" : (mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "");
-        if (!extension) throw new Error("目前僅支援將 JPG/JPEG 或 PNG 照片嵌入 Word");
-        const bytes = new Uint8Array(buffer), dimensions = await getImageDimensions(bytes, mimeType);
+        const bytes = new Uint8Array(buffer);
+        const imageType = detectWordImageType(bytes, response.headers.get("content-type"));
+        if (!imageType) throw new Error("目前僅支援將 JPG/JPEG 或 PNG 照片嵌入 Word");
+        const dimensions = await getImageDimensions(bytes, imageType.mimeType);
+        const extension = imageType.extension;
         children.push(new d.Paragraph({ spacing: { before: 120, after: 80 }, children: [new d.TextRun({ text: "照片 " + (index + 1), bold: true, size: 20 })] }));
         children.push(new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 220 }, children: [new d.ImageRun({ data: bytes, transformation: dimensions, type: extension })] }));
         embedded++;
@@ -1055,7 +1086,8 @@ async function exportEntryWord(entryId) {
       creator: "永鴻消防器材行",
       title: "施工紀錄_" + (entry.work_date || "") + "_" + (entry.site_name || ""),
       description: "永鴻消防每日施工報表單筆施工紀錄",
-      sections: [{ properties: { page: { margin: { top: 720, right: 850, bottom: 720, left: 850 } } }, children }]
+      styles: { default: { document: { run: { font: "Microsoft JhengHei", size: 21 } } } },
+      sections: [{ properties: { page: { margin: { top: 850, right: 900, bottom: 850, left: 900 } } }, children }]
     });
     const blob = await d.Packer.toBlob(doc), url = URL.createObjectURL(blob), anchor = document.createElement("a");
     anchor.href = url;
@@ -1083,14 +1115,14 @@ async function exportGroupWord(entryIds) {
   try {
     const first = entries[0];
     const children = [
-      new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 100 }, children: [new d.TextRun({ text: "永鴻消防器材行", bold: true, size: 32, font: "Microsoft JhengHei" })] }),
-      new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 300 }, children: [new d.TextRun({ text: "施工紀錄單", bold: true, size: 28, font: "Microsoft JhengHei" })] }),
+      ...wordReportTitle("施工紀錄單"),
       wordText("施工日期", first.work_date || ""),
       wordText("施工場所", first.site_name || ""),
       wordText("施工項目數", String(entries.length)),
-      new d.Paragraph({ spacing: { before: 220, after: 160 }, children: [new d.TextRun({ text: "施工項目明細", bold: true, size: 24, font: "Microsoft JhengHei" })] })
+      wordSectionTitle("施工項目明細")
     ];
     let photoTotal = 0, embedded = 0, failed = 0;
+    const photoRefs = [];
     for (let itemIndex = 0; itemIndex < entries.length; itemIndex++) {
       const entry = entries[itemIndex];
       const photos = Array.isArray(entry.photo_paths) ? entry.photo_paths : [];
@@ -1105,26 +1137,43 @@ async function exportGroupWord(entryIds) {
       children.push(wordText("點位／編號", entry.point_name || "未填寫"));
       children.push(wordText("備註", entry.notes || "無"));
       children.push(wordText("施工照片數量", String(photos.length)));
-      for (let photoIndex = 0; photoIndex < photos.length; photoIndex++) {
+      photos.forEach((path, photoIndex) => photoRefs.push({ entry, path, itemIndex, photoIndex }));
+    }
+    if (photoRefs.length) {
+      children.push(wordSectionTitle("施工照片附件", true));
+      children.push(new d.Paragraph({ spacing: { after: 180 }, children: [
+        new d.TextRun({ text: "本附件集中列出各施工項目的現場照片，照片編號標示所屬項目。", size: 19, font: "Microsoft JhengHei", color: "667873" })
+      ] }));
+      for (let i = 0; i < photoRefs.length; i++) {
+        const { entry, path, itemIndex, photoIndex } = photoRefs[i];
         try {
-          const signed = await supabaseClient.storage.from(PHOTO_BUCKET).createSignedUrl(photos[photoIndex], 600);
+          const signed = await supabaseClient.storage.from(PHOTO_BUCKET).createSignedUrl(path, 600);
           if (signed.error || !signed.data || !signed.data.signedUrl) throw new Error((signed.error && signed.error.message) || "無法取得照片連結");
           const response = await fetch(signed.data.signedUrl);
           if (!response.ok) throw new Error("照片下載失敗：HTTP " + response.status);
           const buffer = await response.arrayBuffer();
-          const mimeType = (response.headers.get("content-type") || "").split(";")[0].toLowerCase();
-          const extension = mimeType.includes("png") ? "png" : (mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "");
-          if (!extension) throw new Error("目前僅支援 JPG/JPEG 或 PNG");
-          const bytes = new Uint8Array(buffer), dimensions = await getImageDimensions(bytes, mimeType);
-          children.push(new d.Paragraph({ spacing: { before: 120, after: 80 }, children: [new d.TextRun({ text: "項目 " + (itemIndex + 1) + "，照片 " + (photoIndex + 1), bold: true, size: 20 })] }));
-          children.push(new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 220 }, children: [new d.ImageRun({ data: bytes, transformation: dimensions, type: extension })] }));
+          const bytes = new Uint8Array(buffer);
+          const imageType = detectWordImageType(bytes, response.headers.get("content-type"));
+          if (!imageType) throw new Error("目前僅支援 JPG/JPEG 或 PNG");
+          const dimensions = await getImageDimensions(bytes, imageType.mimeType);
+          const extension = imageType.extension;
+          children.push(new d.Paragraph({ keepNext: true, spacing: { before: 160, after: 100 }, children: [
+            new d.TextRun({ text: "照片 " + (i + 1) + "｜項目 " + (itemIndex + 1) + "：" + (entry.equipment_name || "") + "（項目照片 " + (photoIndex + 1) + "）", bold: true, size: 21, font: "Microsoft JhengHei", color: "14564B" })
+          ] }));
+          children.push(new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 260 }, children: [
+            new d.ImageRun({ data: bytes, transformation: dimensions, type: extension })
+          ] }));
           embedded++;
         } catch (error) {
           failed++;
-          children.push(new d.Paragraph({ spacing: { after: 100 }, children: [new d.TextRun({ text: "項目 " + (itemIndex + 1) + "，照片 " + (photoIndex + 1) + " 未能嵌入：" + (error.message || "未知錯誤"), color: "AA3333", size: 18 })] }));
+          children.push(new d.Paragraph({ spacing: { after: 120 }, children: [
+            new d.TextRun({ text: "照片 " + (i + 1) + "（項目 " + (itemIndex + 1) + "：" + (entry.equipment_name || "") + "，項目照片 " + (photoIndex + 1) + "）未能嵌入：" + (error.message || "未知錯誤"), color: "AA3333", size: 18, font: "Microsoft JhengHei" })
+          ] }));
         }
       }
-      if (!photos.length) children.push(new d.Paragraph({ children: [new d.TextRun({ text: "本項目沒有附加施工照片。", size: 20 })] }));
+    } else {
+      children.push(wordSectionTitle("施工照片附件"));
+      children.push(new d.Paragraph({ children: [new d.TextRun({ text: "本次施工紀錄沒有附加施工照片。", size: 20, font: "Microsoft JhengHei" })] }));
     }
     children.push(new d.Paragraph({ spacing: { before: 300 }, children: [new d.TextRun({ text: "施工照片合計：" + photoTotal + " 張；成功嵌入 " + embedded + " 張" + (failed ? "，未能嵌入 " + failed + " 張" : ""), size: 18, color: "666666" })] }));
     children.push(new d.Paragraph({ spacing: { before: 200 }, children: [new d.TextRun({ text: "文件產生日期：" + today(), size: 18, color: "666666" })] }));
@@ -1132,7 +1181,8 @@ async function exportGroupWord(entryIds) {
       creator: "永鴻消防器材行",
       title: "施工紀錄_" + (first.work_date || "") + "_" + (first.site_name || ""),
       description: "同一天、同一施工場所的整組施工紀錄",
-      sections: [{ properties: { page: { margin: { top: 720, right: 850, bottom: 720, left: 850 } } }, children }]
+      styles: { default: { document: { run: { font: "Microsoft JhengHei", size: 21 } } } },
+      sections: [{ properties: { page: { margin: { top: 850, right: 900, bottom: 850, left: 900 } } }, children }]
     });
     const blob = await d.Packer.toBlob(doc), url = URL.createObjectURL(blob), anchor = document.createElement("a");
     anchor.href = url;
