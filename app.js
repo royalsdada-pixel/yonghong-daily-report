@@ -756,6 +756,53 @@ async function saveEntry(event) {
   }
 }
 
+function readFilters(prefix = "filter") {
+  if (prefix === "stats") return { from: $("statsFrom").value, to: $("statsTo").value };
+  return {
+    from: $("filterFrom").value, to: $("filterTo").value,
+    site: $("filterSite").value.trim().toLowerCase(),
+    workType: $("filterWorkType").value, status: $("filterStatus").value
+  };
+}
+async function fetchEntries(filters = readFilters()) {
+  let query = supabaseClient.from("work_entries").select("*").order("work_date", { ascending: false }).order("created_at", { ascending: false }).limit(2000);
+  if (filters.from) query = query.gte("work_date", filters.from);
+  if (filters.to) query = query.lte("work_date", filters.to);
+  if (filters.workType) query = query.eq("work_type", filters.workType);
+  if (filters.status) query = query.eq("status", filters.status);
+  const { data, error } = await query;
+  if (error) throw error;
+  let rows = data || [];
+  if (filters.site) rows = rows.filter(r => (r.site_name || "").toLowerCase().includes(filters.site));
+  return rows;
+}
+function canEdit(entry) { return isSupervisor() || entry.created_by === currentUser?.id; }
+function renderRecord(entry) {
+  const statusClass = entry.status === "已完工" ? "status-done" : entry.status === "施工中" ? "status-progress" : "status-pending";
+  const editButtons = canEdit(entry) ? `
+    <div class="record-actions">
+      <button class="btn btn-secondary" data-action="edit" data-id="${escapeHtml(entry.id)}" type="button">修改</button>
+      <button class="btn btn-secondary" data-action="delete" data-id="${escapeHtml(entry.id)}" type="button">刪除</button>
+    </div>` : "";
+  return `<article class="record-card">
+    <div class="record-top">
+      <div><h3>${escapeHtml(entry.site_name)}</h3><div class="record-meta">${escapeHtml(entry.work_date)}${entry.floor_area ? " · " + escapeHtml(entry.floor_area) : ""}</div></div>
+      <div class="record-quantity">${escapeHtml(entry.quantity)} ${escapeHtml(entry.unit)}</div>
+    </div>
+    <p><strong>${escapeHtml(entry.equipment_name)}</strong>${entry.equipment_spec ? " · " + escapeHtml(entry.equipment_spec) : ""}</p>
+    <p class="record-meta">施工方式：${escapeHtml(entry.work_type)}　<span class="pill ${statusClass}">${escapeHtml(entry.status)}</span></p>
+    ${entry.point_name ? `<p class="record-meta">點位：${escapeHtml(entry.point_name)}</p>` : ""}
+    ${entry.site_address ? `<p class="record-meta">地址：${escapeHtml(entry.site_address)}</p>` : ""}
+    ${entry.notes ? `<p class="record-meta">備註：${escapeHtml(entry.notes)}</p>` : ""}
+    ${Array.isArray(entry.photo_paths) && entry.photo_paths.length ? `<p class="record-meta">施工照片：${entry.photo_paths.length} 張（編輯紀錄可查看）</p>` : ""}
+    ${isSupervisor() && entry.created_by_name ? `<p class="record-meta">填報人：${escapeHtml(entry.created_by_name)}</p>` : ""}
+    <div class="record-export-actions">
+      <button class="btn btn-secondary" data-action="export-excel" data-id="${escapeHtml(entry.id)}" type="button">匯出 Excel</button>
+      <button class="btn btn-secondary" data-action="export-word" data-id="${escapeHtml(entry.id)}" type="button">匯出 Word</button>
+    </div>
+    ${editButtons}
+  </article>`;
+}
 async function loadRecords() {
   if (!currentUser || !currentProfile) return;
   $("recordsList").innerHTML = `<p class="muted">載入中…</p>`;
