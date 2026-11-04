@@ -96,6 +96,7 @@ function showTab(name) {
   if (name === "stats") loadStats();
   if (name === "catalog") showCatalogTab();
   if (name === "siteCatalog") loadSiteCatalogManager();
+  if (name === "customerCatalog") loadCustomerCatalogManager();
 }
 
 function seedEquipmentSelects() {
@@ -134,12 +135,86 @@ async function loadEquipmentCatalog() {
 }
 
 
+
+let customerCatalogAll = [];
+let customerCatalogManagerItems = [];
+
+async function loadCustomerCatalog() {
+  const { data, error } = await supabaseClient.from("customer_catalog")
+    .select("id,name,active,sort_order").eq("active", true).order("sort_order").order("name");
+  if (error) { console.warn("客戶清單讀取失敗：", error.message); customerCatalogAll = []; }
+  else customerCatalogAll = data || [];
+  populateCustomerOptions();
+  populateSiteManagerCustomerOptions();
+}
+function populateSiteManagerCustomerOptions(selectedId = "") {
+  const select = $("siteCatalogCustomer");
+  if (!select) return;
+  select.innerHTML = '<option value="">請選擇所屬客戶</option>' +
+    customerCatalogAll.map(c => '<option value="' + c.id + '">' + escapeHtml(c.name) + '</option>').join("");
+  if (selectedId && [...select.options].some(o => o.value === String(selectedId))) select.value = String(selectedId);
+}
+async function loadCustomerCatalogManager() {
+  if (!isSupervisor()) return;
+  const { data, error } = await supabaseClient.from("customer_catalog")
+    .select("id,name,active,sort_order").order("sort_order").order("name");
+  if (error) { setMessage("customerCatalogMessage", "讀取客戶清單失敗：" + error.message, "error"); return; }
+  customerCatalogManagerItems = data || [];
+  const { data: sites } = await supabaseClient.from("site_catalog").select("customer_id");
+  const counts = {};
+  (sites || []).forEach(s => { counts[s.customer_id] = (counts[s.customer_id] || 0) + 1; });
+  $("customerCatalogList").innerHTML = customerCatalogManagerItems.length ? customerCatalogManagerItems.map(c => `
+    <tr><td>${escapeHtml(c.name)}</td><td>${counts[c.id] || 0}</td><td>${c.active ? "啟用" : "停用"}</td><td>
+    <button class="btn btn-secondary" type="button" data-customer-action="edit" data-id="${c.id}">編輯</button>
+    <button class="btn btn-secondary" type="button" data-customer-action="toggle" data-id="${c.id}">${c.active ? "停用" : "啟用"}</button></td></tr>`).join("")
+    : '<tr><td colspan="4">尚無客戶資料。</td></tr>';
+}
+function resetCustomerCatalogForm() {
+  $("customerCatalogId").value = ""; $("customerCatalogName").value = "";
+  $("customerCatalogSort").value = "100"; $("customerCatalogActive").checked = true;
+  $("customerCatalogSaveBtn").textContent = "新增客戶"; setMessage("customerCatalogMessage", "");
+}
+async function saveCustomerCatalogItem(event) {
+  event.preventDefault(); if (!isSupervisor()) return;
+  const id = $("customerCatalogId").value;
+  const name = $("customerCatalogName").value.trim();
+  if (!name) return;
+  const payload = { name, sort_order: Number($("customerCatalogSort").value || 100), active: $("customerCatalogActive").checked, updated_at: new Date().toISOString() };
+  const result = id
+    ? await supabaseClient.from("customer_catalog").update(payload).eq("id", Number(id))
+    : await supabaseClient.from("customer_catalog").insert({ ...payload, created_by: currentUser.id });
+  if (result.error) { setMessage("customerCatalogMessage", result.error.message.includes("duplicate key") ? "這個客戶名稱已存在。" : "儲存失敗：" + result.error.message, "error"); return; }
+  if (id) {
+    const old = customerCatalogManagerItems.find(c => String(c.id) === id);
+    if (old && old.name !== name) {
+      const { error } = await supabaseClient.from("site_catalog").update({ customer_name: name, updated_at: new Date().toISOString() }).eq("customer_id", Number(id));
+      if (error) { setMessage("customerCatalogMessage", "客戶已更新，但同步地點名稱失敗，請重新整理並檢查地點清單：" + error.message, "error"); return; }
+    }
+  }
+  setMessage("customerCatalogMessage", id ? "客戶已更新。" : "客戶已新增。", "success");
+  resetCustomerCatalogForm(); await loadCustomerCatalogManager(); await loadCustomerCatalog(); await loadSiteCatalogManager();
+}
+async function customerCatalogAction(event) {
+  const btn = event.target.closest("button[data-customer-action]");
+  if (!btn || !isSupervisor()) return;
+  const item = customerCatalogManagerItems.find(c => String(c.id) === btn.dataset.id); if (!item) return;
+  if (btn.dataset.customerAction === "edit") {
+    $("customerCatalogId").value = item.id; $("customerCatalogName").value = item.name;
+    $("customerCatalogSort").value = item.sort_order ?? 100; $("customerCatalogActive").checked = !!item.active;
+    $("customerCatalogSaveBtn").textContent = "儲存修改"; setMessage("customerCatalogMessage", "正在編輯：" + item.name);
+  } else {
+    const { error } = await supabaseClient.from("customer_catalog").update({ active: !item.active, updated_at: new Date().toISOString() }).eq("id", item.id);
+    if (error) setMessage("customerCatalogMessage", "更新失敗：" + error.message, "error");
+    else { await loadCustomerCatalogManager(); await loadCustomerCatalog(); }
+  }
+}
+
 let siteCatalogAll = [];
 let siteCatalogManagerItems = [];
 
 async function loadSiteCatalog() {
   const { data, error } = await supabaseClient.from("site_catalog")
-    .select("id,customer_name,display_name,site_name,site_address,default_floor_area,active,sort_order")
+    .select("id,customer_id,customer_name,display_name,site_name,site_address,default_floor_area,active,sort_order")
     .eq("active", true).order("sort_order").order("display_name");
   if (error) {
     console.warn("施工地點清單讀取失敗：", error.message);
@@ -152,7 +227,7 @@ async function loadSiteCatalog() {
 function populateCustomerOptions(selectedCustomer = "") {
   const customerSelect = $("customerName");
   if (!customerSelect) return;
-  const customers = [...new Set(siteCatalogAll.map(item => item.customer_name))].sort((x,y) => x.localeCompare(y, "zh-Hant"));
+  const customers = customerCatalogAll.map(c => c.name);
   customerSelect.innerHTML = '<option value="">請先選擇客戶</option>' +
     customers.map(name => '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>').join("") +
     '<option value="__manual__">其他／臨時客戶</option>';
@@ -191,7 +266,7 @@ function handleSiteSelection() {
 async function loadSiteCatalogManager() {
   if (!isSupervisor()) return;
   const { data, error } = await supabaseClient.from("site_catalog")
-    .select("id,customer_name,display_name,site_name,site_address,default_floor_area,active,sort_order")
+    .select("id,customer_id,customer_name,display_name,site_name,site_address,default_floor_area,active,sort_order")
     .order("sort_order").order("customer_name").order("display_name");
   if (error) { setMessage("siteCatalogMessage", "讀取地點清單失敗：" + error.message, "error"); return; }
   siteCatalogManagerItems = data || [];
@@ -223,8 +298,11 @@ function resetSiteCatalogForm() {
 async function saveSiteCatalogItem(event) {
   event.preventDefault();
   if (!isSupervisor()) return;
+  const selectedCustomer = customerCatalogAll.find(c => String(c.id) === $("siteCatalogCustomer").value);
+  if (!selectedCustomer) { setMessage("siteCatalogMessage", "請先到客戶管理建立並選擇客戶。", "error"); return; }
   const payload = {
-    customer_name: $("siteCatalogCustomer").value.trim(),
+    customer_id: selectedCustomer.id,
+    customer_name: selectedCustomer.name,
     display_name: $("siteCatalogDisplayName").value.trim(),
     site_name: $("siteCatalogCanonicalName").value.trim(),
     site_address: $("siteCatalogAddress").value.trim() || null,
@@ -255,7 +333,7 @@ async function siteCatalogAction(event) {
   if (!item) return;
   if (btn.dataset.siteAction === "edit") {
     $("siteCatalogId").value = item.id;
-    $("siteCatalogCustomer").value = item.customer_name;
+    $("siteCatalogCustomer").value = String(item.customer_id || customerCatalogManagerItems.find(c => c.name === item.customer_name)?.id || "");
     $("siteCatalogDisplayName").value = item.display_name;
     $("siteCatalogCanonicalName").value = item.site_name;
     $("siteCatalogAddress").value = item.site_address || "";
@@ -372,8 +450,10 @@ async function onSession(session) {
   try {
     await loadProfile(currentUser);
     await loadEquipmentCatalog();
+    await loadCustomerCatalog();
     await loadSiteCatalog();
     $("catalogTabBtn").classList.toggle("hidden", !isSupervisor());
+    $("customerCatalogTabBtn").classList.toggle("hidden", !isSupervisor());
     $("siteCatalogTabBtn").classList.toggle("hidden", !isSupervisor());
     setLoggedInUI(true);
     setConnection("雲端已連線");
@@ -1080,6 +1160,10 @@ function wireEvents() {
   $("catalogResetBtn").addEventListener("click", resetCatalogForm);
   $("catalogRefreshBtn").addEventListener("click", loadCatalogManager);
   $("catalogList").addEventListener("click", catalogAction);
+  $("customerCatalogForm").addEventListener("submit", saveCustomerCatalogItem);
+  $("customerCatalogResetBtn").addEventListener("click", resetCustomerCatalogForm);
+  $("customerCatalogRefreshBtn").addEventListener("click", loadCustomerCatalogManager);
+  $("customerCatalogList").addEventListener("click", customerCatalogAction);
   $("siteCatalogForm").addEventListener("submit", saveSiteCatalogItem);
   $("siteCatalogResetBtn").addEventListener("click", resetSiteCatalogForm);
   $("siteCatalogRefreshBtn").addEventListener("click", loadSiteCatalogManager);
