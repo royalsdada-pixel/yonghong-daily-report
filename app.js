@@ -1167,7 +1167,7 @@ async function exportGroupWord(entryIds) {
         } catch (error) {
           failed++;
           children.push(new d.Paragraph({ spacing: { after: 120 }, children: [
-            new d.TextRun({ text: "照片 " + (i + 1) + " 未能嵌入：" + (error.message || "未知錯誤"), color: "AA3333", size: 18, font: "Microsoft JhengHei" })
+            new d.TextRun({ text: "照片 " + (i + 1) + "（項目 " + (itemIndex + 1) + "：" + (entry.equipment_name || "") + "，項目照片 " + (photoIndex + 1) + "）未能嵌入：" + (error.message || "未知錯誤"), color: "AA3333", size: 18, font: "Microsoft JhengHei" })
           ] }));
         }
       }
