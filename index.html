@@ -71,6 +71,8 @@
         <button class="tab" data-tab="records" type="button">施工紀錄</button>
         <button class="tab" data-tab="stats" type="button">數量統計</button>
         <button id="catalogTabBtn" class="tab hidden" data-tab="catalog" type="button">品項管理</button>
+        <button id="customerCatalogTabBtn" class="tab hidden" data-tab="customerCatalog" type="button">客戶管理</button>
+        <button id="siteCatalogTabBtn" class="tab hidden" data-tab="siteCatalog" type="button">地點管理</button>
       </nav>
 
       <section id="tab-entry" class="panel tab-panel">
@@ -84,8 +86,18 @@
             <label>施工日期
               <input id="workDate" type="date" required>
             </label>
-            <label>施工場所
-              <input id="siteName" type="text" maxlength="160" required placeholder="例如：成功大學機械系">
+            <label>客戶
+              <select id="customerName" required>
+                <option value="">請先選擇客戶</option>
+              </select>
+            </label>
+            <label>施工地點
+              <select id="siteCatalogSelect" required disabled>
+                <option value="">請先選擇客戶</option>
+              </select>
+            </label>
+            <label id="manualSiteNameWrap" class="hidden">其他施工場所名稱
+              <input id="siteName" type="text" maxlength="160" placeholder="輸入新的或未建檔的施工場所">
             </label>
           </div>
           <label>場所地址（選填）
@@ -176,6 +188,68 @@
         </form>
         <h3>現有共用品項</h3>
         <div class="table-wrap"><table><thead><tr><th>設備類別</th><th>品項名稱</th><th>規格</th><th>單位</th><th>狀態</th><th>操作</th></tr></thead><tbody id="catalogList"><tr><td colspan="6">載入中…</td></tr></tbody></table></div>
+      </section>
+
+      <section id="tab-customerCatalog" class="panel tab-panel hidden">
+        <div class="section-heading"><h2>客戶管理</h2><button id="customerCatalogRefreshBtn" class="btn btn-secondary" type="button">重新整理</button></div>
+        <p class="muted small">主管可獨立新增、修改及停用客戶。停用客戶不會刪除其施工地點或既有施工紀錄。</p>
+        <form id="customerCatalogForm" class="stack">
+          <input id="customerCatalogId" type="hidden">
+          <label>客戶名稱
+            <input id="customerCatalogName" required maxlength="100" placeholder="例如：成功大學、臺南郵局">
+          </label>
+          <div class="form-grid">
+            <label>排序
+              <input id="customerCatalogSort" type="number" step="1" value="100">
+            </label>
+            <label class="inline-check"><input id="customerCatalogActive" type="checkbox" checked> 啟用此客戶</label>
+          </div>
+          <div class="button-row">
+            <button id="customerCatalogSaveBtn" class="btn btn-primary" type="submit">新增客戶</button>
+            <button id="customerCatalogResetBtn" class="btn btn-secondary" type="button">清除／取消編輯</button>
+          </div>
+          <p id="customerCatalogMessage" class="message" role="status"></p>
+        </form>
+        <h3>客戶清單</h3>
+        <div class="table-wrap"><table><thead><tr><th>客戶名稱</th><th>所屬地點數</th><th>狀態</th><th>操作</th></tr></thead><tbody id="customerCatalogList"><tr><td colspan="4">載入中…</td></tr></tbody></table></div>
+      </section>
+
+      <section id="tab-siteCatalog" class="panel tab-panel hidden">
+        <div class="section-heading"><h2>常用客戶與施工地點管理</h2><button id="siteCatalogRefreshBtn" class="btn btn-secondary" type="button">重新整理</button></div>
+        <p class="muted small">僅主管可維護。一般施工人員可在新增施工時選擇已啟用的地點。停用不會影響既有施工紀錄。</p>
+        <form id="siteCatalogForm" class="stack">
+          <input id="siteCatalogId" type="hidden">
+          <div class="form-grid">
+            <label>所屬客戶
+              <select id="siteCatalogCustomer" required><option value="">請先到客戶管理新增客戶</option></select>
+            </label>
+            <label>地點顯示名稱
+              <input id="siteCatalogDisplayName" required maxlength="120" placeholder="例如：光復校區雲平大樓、永康郵局">
+            </label>
+          </div>
+          <label>施工紀錄使用的場所名稱
+            <input id="siteCatalogCanonicalName" required maxlength="160" placeholder="例如：成功大學光復校區雲平大樓">
+          </label>
+          <label>預設地址／校區（選填）
+            <input id="siteCatalogAddress" maxlength="240" placeholder="例如：光復校區">
+          </label>
+          <div class="form-grid">
+            <label>預設樓層／區域（選填）
+              <input id="siteCatalogFloor" maxlength="120" placeholder="例如：全棟、三樓">
+            </label>
+            <label>排序
+              <input id="siteCatalogSort" type="number" step="1" value="100">
+            </label>
+          </div>
+          <label class="inline-check"><input id="siteCatalogActive" type="checkbox" checked> 啟用此地點</label>
+          <div class="button-row">
+            <button id="siteCatalogSaveBtn" class="btn btn-primary" type="submit">新增地點</button>
+            <button id="siteCatalogResetBtn" class="btn btn-secondary" type="button">清除／取消編輯</button>
+          </div>
+          <p id="siteCatalogMessage" class="message" role="status"></p>
+        </form>
+        <h3>常用地點清單</h3>
+        <div class="table-wrap"><table><thead><tr><th>客戶</th><th>顯示名稱</th><th>施工紀錄名稱</th><th>地址／校區</th><th>狀態</th><th>操作</th></tr></thead><tbody id="siteCatalogList"><tr><td colspan="6">載入中…</td></tr></tbody></table></div>
       </section>
 
       <section id="tab-records" class="panel tab-panel hidden">
