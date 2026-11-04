@@ -1100,8 +1100,7 @@ async function exportGroupWord(entryIds) {
   try {
     const first = entries[0];
     const children = [
-      new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 100 }, children: [new d.TextRun({ text: "永鴻消防器材行", bold: true, size: 32, font: "Microsoft JhengHei" })] }),
-      new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 300 }, children: [new d.TextRun({ text: "施工紀錄單", bold: true, size: 28, font: "Microsoft JhengHei" })] }),
+      ...wordReportTitle("施工紀錄單"),
       wordText("施工日期", first.work_date || ""),
       wordText("施工場所", first.site_name || ""),
       wordText("施工項目數", String(entries.length)),
@@ -1166,7 +1165,8 @@ async function exportGroupWord(entryIds) {
       creator: "永鴻消防器材行",
       title: "施工紀錄_" + (first.work_date || "") + "_" + (first.site_name || ""),
       description: "同一天、同一施工場所的整組施工紀錄",
-      sections: [{ properties: { page: { margin: { top: 720, right: 850, bottom: 720, left: 850 } } }, children }]
+      styles: { default: { document: { run: { font: "Microsoft JhengHei", size: 21 } } },
+      sections: [{ properties: { page: { margin: { top: 850, right: 900, bottom: 850, left: 900 } } }, children }]
     });
     const blob = await d.Packer.toBlob(doc), url = URL.createObjectURL(blob), anchor = document.createElement("a");
     anchor.href = url;
