@@ -103,59 +103,62 @@
           <label>場所地址（選填）
             <input id="siteAddress" type="text" maxlength="240" placeholder="輸入地址或校區">
           </label>
-          <div class="form-grid">
-            <label>樓層／區域（選填）
-              <input id="floorArea" type="text" maxlength="120" placeholder="例如：三樓、東側走廊">
-            </label>
-            <label>設備類別
-              <select id="equipmentName" required></select>
-            </label>
-          </div>
-          <div class="form-grid">
-            <label>設備規格
-              <select id="equipmentSpec"></select>
-              <span id="specHelp" class="hint">依設備類別選擇適用規格</span>
-            </label>
-            <label>施工方式
-              <select id="workType" required>
-                <option value="移置">移置</option>
-                <option value="新設">新設</option>
-                <option value="更換">更換</option>
-                <option value="維修">維修</option>
-                <option value="拆除">拆除</option>
-                <option value="測試">測試</option>
-              </select>
-            </label>
-          </div>
-          <div class="form-grid">
-            <label>數量
-              <input id="quantity" type="number" min="0.01" step="0.01" required value="1">
-            </label>
-            <label>計量單位
-              <input id="unit" type="text" maxlength="20" required value="具" placeholder="具、顆、只、組">
-            </label>
-          </div>
-          <div class="form-grid">
-            <label>施工狀態
-              <select id="status">
-                <option value="已完工">已完工</option>
-                <option value="施工中">施工中</option>
-                <option value="待處理">待處理</option>
-              </select>
-            </label>
-            <label>點位／編號（選填）
-              <input id="pointName" type="text" maxlength="120" placeholder="例如：3F-東側-01">
-            </label>
-          </div>
-          <label>施工照片（選填，可多選）
-            <input id="photoFiles" type="file" accept="image/*" multiple>
-            <span class="hint">可拍照或從相簿選取。每張照片上限 8 MB，照片會上傳至私人雲端儲存空間。</span>
+          <label>樓層／區域（選填）
+            <input id="floorArea" type="text" maxlength="120" placeholder="例如：三樓、東側走廊">
           </label>
-          <div id="photoPreview" class="photo-preview"></div>
-          <div id="existingPhotos" class="photo-preview"></div>
-          <label>備註（選填）
-            <textarea id="notes" rows="3" maxlength="1500" placeholder="故障情形、材料型號、施工補充說明"></textarea>
-          </label>
+          <div class="section-heading work-items-heading">
+            <h3>施工項目</h3>
+            <span class="muted small">每個項目獨立填寫設備、數量及照片</span>
+          </div>
+          <div id="workItemsContainer" class="work-items-container"></div>
+          <button id="addWorkItemBtn" class="btn btn-secondary" type="button">＋ 新增施工項目</button>
+          <template id="workItemTemplate">
+            <section class="work-item-card">
+              <div class="work-item-heading">
+                <h3 class="work-item-title">項目 1</h3>
+                <button class="btn btn-secondary remove-work-item-btn" type="button">刪除此項目</button>
+              </div>
+              <div class="form-grid">
+                <label>設備類別
+                  <select data-field="equipmentName" required></select>
+                </label>
+                <label>設備規格
+                  <select data-field="equipmentSpec"></select>
+                  <span class="hint" data-field="specHelp">依設備類別選擇適用規格</span>
+                </label>
+              </div>
+              <div class="form-grid">
+                <label>施工方式
+                  <select data-field="workType" required>
+                    <option value="移置">移置</option><option value="新設">新設</option><option value="更換">更換</option><option value="維修">維修</option><option value="拆除">拆除</option><option value="測試">測試</option>
+                  </select>
+                </label>
+                <label>施工狀態
+                  <select data-field="status"><option value="已完工">已完工</option><option value="施工中">施工中</option><option value="待處理">待處理</option></select>
+                </label>
+              </div>
+              <div class="form-grid">
+                <label>數量
+                  <input data-field="quantity" type="number" min="0.01" step="0.01" required value="1">
+                </label>
+                <label>計量單位
+                  <input data-field="unit" type="text" maxlength="20" required value="具" placeholder="具、顆、只、組">
+                </label>
+              </div>
+              <label>點位／編號（選填）
+                <input data-field="pointName" type="text" maxlength="120" placeholder="例如：3F-東側-01">
+              </label>
+              <label>施工照片（選填，可多選）
+                <input data-field="photoFiles" type="file" accept="image/*" multiple>
+                <span class="hint">每張照片上限 8 MB，照片會上傳至私人雲端儲存空間。</span>
+              </label>
+              <div data-field="photoPreview" class="photo-preview"></div>
+              <div data-field="existingPhotos" class="photo-preview"></div>
+              <label>項目備註（選填）
+                <textarea data-field="notes" rows="3" maxlength="1500" placeholder="故障情形、材料型號、施工補充說明"></textarea>
+              </label>
+            </section>
+          </template>
           <div class="button-row">
             <button id="saveBtn" class="btn btn-primary" type="submit">儲存施工紀錄</button>
             <button id="cancelEditBtn" class="btn btn-secondary hidden" type="button">取消修改</button>
