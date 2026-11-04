@@ -793,7 +793,8 @@ async function exportExcel(singleItem = false, entryId = null) {
   setExportMessage("正在整理施工明細與照片，請稍候…");
   try {
     // 匯出時重新依目前畫面篩選條件讀取，避免使用者未按「套用篩選」而匯出舊結果。
-    let entries = await fetchEntries(readFilters());
+    // 單筆匯出依目前登入者可讀取的資料重新查詢，不受未套用的篩選欄位影響。
+    let entries = await fetchEntries(entryId ? {} : readFilters());
     if (entryId) entries = entries.filter(e => String(e.id) === String(entryId));
     if (!entryId && selectedSites.length) entries = entries.filter(e => selectedSites.includes(e.site_name));
     if (!entries.length) {
