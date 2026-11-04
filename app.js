@@ -684,6 +684,7 @@ function startEdit(entry) {
 async function saveEntry(event) {
   event.preventDefault();
   if (!currentUser) return;
+  const wasEditing = Boolean(editingId);
   const cards = [...document.querySelectorAll("#workItemsContainer .work-item-card")];
   const common = {
     work_date: $("workDate").value, site_name: $("siteName").value.trim(),
@@ -747,8 +748,9 @@ async function saveEntry(event) {
       setMessage("entryMessage", `施工紀錄已儲存，但部分照片需要檢查：${photoWarnings.join("；")}`, "error");
       await loadRecords();
     } else {
-      setMessage("entryMessage", editingId ? "修改已儲存。" : `已成功儲存 ${savedRows.length} 個施工項目。`, "success");
-      resetForm(); await loadRecords();
+      resetForm();
+      setMessage("entryMessage", wasEditing ? "修改已儲存。" : `已成功儲存 ${savedRows.length} 個施工項目。`, "success");
+      await loadRecords();
     }
   } catch (err) {
     $("saveBtn").disabled = false;
