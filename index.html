@@ -148,12 +148,27 @@
               <label>點位／編號（選填）
                 <input data-field="pointName" type="text" maxlength="120" placeholder="例如：3F-東側-01">
               </label>
-              <label>施工照片（選填，可多選）
-                <input data-field="photoFiles" type="file" accept="image/*" multiple>
-                <span class="hint">每張照片上限 8 MB，照片會上傳至私人雲端儲存空間。</span>
-              </label>
-              <div data-field="photoPreview" class="photo-preview"></div>
-              <div data-field="existingPhotos" class="photo-preview"></div>
+              <div class="photo-upload-grid">
+                <section class="photo-upload-card before">
+                  <h4>施工前照片</h4>
+                  <label class="photo-upload-button">＋ 上傳施工前照片
+                    <input data-field="beforePhotoFiles" type="file" accept="image/*" multiple>
+                  </label>
+                  <span class="hint">可一次選取多張，每張上限 8 MB。</span>
+                  <div data-field="photoPreviewBefore" class="photo-preview"></div>
+                  <div data-field="existingBeforePhotos" class="photo-preview"></div>
+                </section>
+                <section class="photo-upload-card after">
+                  <h4>施工後照片</h4>
+                  <label class="photo-upload-button">＋ 上傳施工後照片
+                    <input data-field="afterPhotoFiles" type="file" accept="image/*" multiple>
+                  </label>
+                  <span class="hint">可一次選取多張，每張上限 8 MB。</span>
+                  <div data-field="photoPreviewAfter" class="photo-preview"></div>
+                  <div data-field="existingAfterPhotos" class="photo-preview"></div>
+                </section>
+              </div>
+              <div data-field="existingLegacyPhotos" class="photo-preview"></div>
               <label>項目備註（選填）
                 <textarea data-field="notes" rows="3" maxlength="1500" placeholder="故障情形、材料型號、施工補充說明"></textarea>
               </label>
@@ -325,6 +340,6 @@
   <!-- ExcelJS 用於產生 .xlsx 活頁簿及嵌入照片；正式匯出邏輯由 app.js 處理。 -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
-  <script src="./app.js?v=20261104-word-report-v2"></script>
+  <script src="./app.js?v=20261105-before-after-v1"></script>
 </body>
 </html>
