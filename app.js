@@ -1140,94 +1140,150 @@ async function exportEntryWord(entryId) {
 
 async function exportGroupWord(entryIds) {
   const d = window.docx;
-  if (!d || !d.Document || !d.Packer || !d.ImageRun) {
+  if (!d || !d.Document || !d.Packer || !d.ImageRun || !d.Table || !d.TableRow || !d.TableCell) {
     setExportMessage("Word 匯出元件載入失敗，請重新整理頁面後再試。", "error"); return;
   }
   const ids = entryIds.map(String);
   const entries = sortExportEntries(cachedEntries.filter(entry => ids.includes(String(entry.id))));
   if (!entries.length) { setExportMessage("找不到這組施工紀錄，請重新整理後再試。", "error"); return; }
-  setExportMessage("正在製作整組 Word 施工紀錄並整理照片，請稍候…");
+  setExportMessage("正在製作兩頁式 Word 施工報告並整理施工前後照片，請稍候…");
   const buttons = [...document.querySelectorAll('button[data-action="export-group-word"]')].filter(button => button.dataset.ids === ids.join(","));
   buttons.forEach(button => button.disabled = true);
   try {
     const first = entries[0];
     const children = [
-      ...wordReportTitle("施工紀錄單"),
+      ...wordReportTitle("工程施工紀錄"),
+      wordSectionTitle("工程基本資料"),
       wordText("施工日期", first.work_date || ""),
-      wordText("施工場所", first.site_name || ""),
-      wordText("施工項目數", String(entries.length)),
-      wordSectionTitle("施工項目明細")
+      wordText("工程／施工場所", first.site_name || ""),
+      wordText("場所地址", first.site_address || "未填寫"),
+      wordText("樓層／區域", first.floor_area || "未填寫"),
+      wordSectionTitle("施工執行情形")
     ];
-    let photoTotal = 0, embedded = 0, failed = 0;
+    const border = {
+      top: { style: d.BorderStyle.SINGLE, size: 1, color: "8DA69A" },
+      bottom: { style: d.BorderStyle.SINGLE, size: 1, color: "8DA69A" },
+      left: { style: d.BorderStyle.SINGLE, size: 1, color: "8DA69A" },
+      right: { style: d.BorderStyle.SINGLE, size: 1, color: "8DA69A" },
+      insideHorizontal: { style: d.BorderStyle.SINGLE, size: 1, color: "B8C8C0" },
+      insideVertical: { style: d.BorderStyle.SINGLE, size: 1, color: "B8C8C0" }
+    };
+    const makeCell = (text, header = false) => new d.TableCell({
+      width: { size: header ? 16 : 16, type: d.WidthType.PERCENTAGE },
+      shading: header ? { fill: "245B45", type: d.ShadingType.CLEAR } : undefined,
+      margins: { top: 90, bottom: 90, left: 80, right: 80 },
+      children: [new d.Paragraph({
+        alignment: d.AlignmentType.CENTER,
+        children: [new d.TextRun({ text: String(text ?? ""), bold: header, size: header ? 17 : 16, font: "Microsoft JhengHei", color: header ? "FFFFFF" : "263A36" })]
+      })]
+    });
+    const itemRows = [
+      new d.TableRow({ tableHeader: true, children: ["項次","施工項目／規格","施工方式","數量","狀態","點位／備註"].map(x => makeCell(x, true)) }),
+      ...entries.map((entry, index) => new d.TableRow({ children: [
+        makeCell(index + 1),
+        makeCell((entry.equipment_name || "") + (entry.equipment_spec ? "／" + entry.equipment_spec : "")),
+        makeCell(entry.work_type || ""),
+        makeCell(String(entry.quantity ?? "") + " " + (entry.unit || "")),
+        makeCell(entry.status || ""),
+        makeCell([entry.point_name, entry.notes].filter(Boolean).join("／") || " ")
+      ] }))
+    ];
+    children.push(new d.Table({ rows: itemRows, width: { size: 100, type: d.WidthType.PERCENTAGE }, borders: border }));
+    children.push(new d.Paragraph({ spacing: { before: 260, after: 80 }, children: [
+      new d.TextRun({ text: "施工項目共 " + entries.length + " 項", size: 17, color: "667873", font: "Microsoft JhengHei" })
+    ] }));
+
     const photoRefs = [];
     for (let itemIndex = 0; itemIndex < entries.length; itemIndex++) {
       const entry = entries[itemIndex];
-      const photos = Array.isArray(entry.photo_paths) ? entry.photo_paths : [];
-      photoTotal += photos.length;
-      children.push(new d.Paragraph({ heading: d.HeadingLevel.HEADING_2, spacing: { before: 260, after: 120 }, children: [new d.TextRun({ text: "項目 " + (itemIndex + 1) + "：" + (entry.equipment_name || ""), bold: true, size: 24, font: "Microsoft JhengHei" })] }));
-      children.push(wordText("設備規格", entry.equipment_spec || "未填寫"));
-      children.push(wordText("施工方式", entry.work_type || ""));
-      children.push(wordText("施工數量", String(entry.quantity == null ? "" : entry.quantity) + " " + (entry.unit || "")));
-      children.push(wordText("施工狀態", entry.status || ""));
-      children.push(wordText("樓層／區域", entry.floor_area || "未填寫"));
-      children.push(wordText("場所地址", entry.site_address || "未填寫"));
-      children.push(wordText("點位／編號", entry.point_name || "未填寫"));
-      children.push(wordText("備註", entry.notes || "無"));
-      children.push(wordText("施工照片數量", String(photos.length)));
-      photos.forEach((path, photoIndex) => photoRefs.push({ entry, path, itemIndex, photoIndex }));
+      const paths = Array.isArray(entry.photo_paths) ? entry.photo_paths : [];
+      paths.forEach((path, photoIndex) => photoRefs.push({
+        entry, path, itemIndex, photoIndex,
+        category: getPhotoCategory(path)
+      }));
     }
-    if (photoRefs.length) {
-      children.push(wordSectionTitle("施工照片附件", true));
-      children.push(new d.Paragraph({ spacing: { after: 180 }, children: [
-        new d.TextRun({ text: "本附件集中列出各施工項目的現場照片，照片編號標示所屬項目。", size: 19, font: "Microsoft JhengHei", color: "667873" })
-      ] }));
-      for (let i = 0; i < photoRefs.length; i++) {
-        const { entry, path, itemIndex, photoIndex } = photoRefs[i];
-        try {
-          const signed = await supabaseClient.storage.from(PHOTO_BUCKET).createSignedUrl(path, 600);
-          if (signed.error || !signed.data || !signed.data.signedUrl) throw new Error((signed.error && signed.error.message) || "無法取得照片連結");
-          const response = await fetch(signed.data.signedUrl);
-          if (!response.ok) throw new Error("照片下載失敗：HTTP " + response.status);
-          const buffer = await response.arrayBuffer();
-          const bytes = new Uint8Array(buffer);
-          const imageType = detectWordImageType(bytes, response.headers.get("content-type"));
-          if (!imageType) throw new Error("目前僅支援 JPG/JPEG 或 PNG");
-          const preparedImage = await prepareWordImage(bytes, imageType.mimeType);
-        const dimensions = preparedImage.dimensions;
-          const extension = preparedImage.extension;
-          children.push(new d.Paragraph({ keepNext: true, spacing: { before: 160, after: 100 }, children: [
-            new d.TextRun({ text: "照片 " + (i + 1) + "｜項目 " + (itemIndex + 1) + "：" + (entry.equipment_name || "") + "（項目照片 " + (photoIndex + 1) + "）", bold: true, size: 21, font: "Microsoft JhengHei", color: "14564B" })
-          ] }));
-          children.push(new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 260 }, children: [
-            new d.ImageRun({ data: preparedImage.bytes, transformation: dimensions, type: extension })
-          ] }));
-          embedded++;
-        } catch (error) {
-          failed++;
-          children.push(new d.Paragraph({ spacing: { after: 120 }, children: [
-            new d.TextRun({ text: "照片 " + (i + 1) + "（項目 " + (itemIndex + 1) + "：" + (entry.equipment_name || "") + "，項目照片 " + (photoIndex + 1) + "）未能嵌入：" + (error.message || "未知錯誤"), color: "AA3333", size: 18, font: "Microsoft JhengHei" })
-          ] }));
-        }
-      }
+    const categoryOrder = { before: 0, after: 1, legacy: 2 };
+    photoRefs.sort((a, b) => categoryOrder[a.category] - categoryOrder[b.category] || a.itemIndex - b.itemIndex || a.photoIndex - b.photoIndex);
+    let embedded = 0, failed = 0;
+    if (!photoRefs.length) {
+      children.push(wordSectionTitle("施工照片紀錄", true));
+      children.push(new d.Paragraph({ children: [new d.TextRun({ text: "本次施工紀錄尚未上傳照片。", size: 20, font: "Microsoft JhengHei" })] }));
     } else {
-      children.push(wordSectionTitle("施工照片附件"));
-      children.push(new d.Paragraph({ children: [new d.TextRun({ text: "本次施工紀錄沒有附加施工照片。", size: 20, font: "Microsoft JhengHei" })] }));
+      for (let pageIndex = 0; pageIndex < photoRefs.length; pageIndex += 4) {
+        const pagePhotos = photoRefs.slice(pageIndex, pageIndex + 4);
+        children.push(wordSectionTitle("施工前後照片紀錄", true));
+        children.push(new d.Paragraph({ spacing: { after: 120 }, children: [
+          new d.TextRun({ text: "工程／施工場所：" + (first.site_name || "") + "　施工日期：" + (first.work_date || ""), size: 17, font: "Microsoft JhengHei", color: "667873" })
+        ] }));
+        const cells = [];
+        for (const photo of pagePhotos) {
+          const categoryLabel = photo.category === "before" ? "施工前照片" : photo.category === "after" ? "施工後照片" : "既有未分類照片";
+          const cellChildren = [new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 70 }, children: [
+            new d.TextRun({ text: categoryLabel, bold: true, size: 19, font: "Microsoft JhengHei", color: photo.category === "before" ? "9A681D" : "14564B" })
+          ] })];
+          try {
+            const signed = await supabaseClient.storage.from(PHOTO_BUCKET).createSignedUrl(photo.path, 600);
+            if (signed.error || !signed.data?.signedUrl) throw new Error(signed.error?.message || "無法取得照片連結");
+            const response = await fetch(signed.data.signedUrl);
+            if (!response.ok) throw new Error("照片下載失敗：HTTP " + response.status);
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            const imageType = detectWordImageType(bytes, response.headers.get("content-type"));
+            if (!imageType) throw new Error("目前僅支援 JPG/JPEG 或 PNG");
+            const prepared = await prepareWordImage(bytes, imageType.mimeType);
+            const scale = Math.min(250 / prepared.dimensions.width, 185 / prepared.dimensions.height, 1);
+            const dimensions = {
+              width: Math.max(1, Math.round(prepared.dimensions.width * scale)),
+              height: Math.max(1, Math.round(prepared.dimensions.height * scale))
+            };
+            cellChildren.push(new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 70 }, children: [
+              new d.ImageRun({ data: prepared.bytes, transformation: dimensions, type: prepared.extension })
+            ] }));
+            embedded++;
+          } catch (error) {
+            failed++;
+            cellChildren.push(new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { after: 70 }, children: [
+              new d.TextRun({ text: "照片無法嵌入：" + (error.message || "未知錯誤"), color: "AA3333", size: 15, font: "Microsoft JhengHei" })
+            ] }));
+          }
+          const itemLabel = (photo.entry.equipment_name || "施工項目") + (photo.entry.equipment_spec ? "／" + photo.entry.equipment_spec : "");
+          const pointLabel = photo.entry.point_name ? "點位：" + photo.entry.point_name : "";
+          cellChildren.push(new d.Paragraph({ alignment: d.AlignmentType.LEFT, spacing: { before: 50, after: 30 }, children: [
+            new d.TextRun({ text: itemLabel, bold: true, size: 16, font: "Microsoft JhengHei", color: "263A36" })
+          ] }));
+          if (pointLabel) cellChildren.push(new d.Paragraph({ children: [new d.TextRun({ text: pointLabel, size: 15, font: "Microsoft JhengHei", color: "667873" })] }));
+          cells.push(new d.TableCell({
+            width: { size: 50, type: d.WidthType.PERCENTAGE },
+            margins: { top: 100, bottom: 100, left: 120, right: 120 },
+            children: cellChildren
+          }));
+        }
+        while (cells.length < 4) cells.push(new d.TableCell({
+          width: { size: 50, type: d.WidthType.PERCENTAGE },
+          children: [new d.Paragraph({ children: [new d.TextRun({ text: " ", size: 16 })] })]
+        }));
+        const photoRows = [
+          new d.TableRow({ children: cells.slice(0, 2) }),
+          new d.TableRow({ children: cells.slice(2, 4) })
+        ];
+        children.push(new d.Table({ rows: photoRows, width: { size: 100, type: d.WidthType.PERCENTAGE }, borders: border }));
+      }
     }
-    children.push(new d.Paragraph({ spacing: { before: 300 }, children: [new d.TextRun({ text: "施工照片合計：" + photoTotal + " 張；成功嵌入 " + embedded + " 張" + (failed ? "，未能嵌入 " + failed + " 張" : ""), size: 18, color: "666666" })] }));
-    children.push(new d.Paragraph({ spacing: { before: 200 }, children: [new d.TextRun({ text: "文件產生日期：" + today(), size: 18, color: "666666" })] }));
+    children.push(new d.Paragraph({ spacing: { before: 220 }, children: [
+      new d.TextRun({ text: "照片合計 " + photoRefs.length + " 張；成功嵌入 " + embedded + " 張" + (failed ? "，未能嵌入 " + failed + " 張" : ""), size: 16, color: "667873", font: "Microsoft JhengHei" })
+    ] }));
     const doc = new d.Document({
       creator: "永鴻消防器材行",
-      title: "施工紀錄_" + (first.work_date || "") + "_" + (first.site_name || ""),
-      description: "同一天、同一施工場所的整組施工紀錄",
-      styles: { default: { document: { run: { font: "Microsoft JhengHei", size: 21 } } } },
-      sections: [{ properties: { page: { margin: { top: 850, right: 900, bottom: 850, left: 900 } } }, children }]
+      title: "工程施工紀錄_" + (first.work_date || "") + "_" + (first.site_name || ""),
+      description: "第一頁施工基本資料與執行情形，後續每頁四張施工前後照片",
+      styles: { default: { document: { run: { font: "Microsoft JhengHei", size: 19 } } } },
+      sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 720, right: 720, bottom: 720, left: 720 } } }, children }]
     });
     const blob = await d.Packer.toBlob(doc), url = URL.createObjectURL(blob), anchor = document.createElement("a");
     anchor.href = url;
     const filenamePart = value => String(value || "").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
-    anchor.download = "永鴻消防施工紀錄_" + (first.work_date || today()) + "_" + filenamePart(first.site_name) + "_整組.docx";
+    anchor.download = "永鴻消防施工報告_" + (first.work_date || today()) + "_" + filenamePart(first.site_name) + ".docx";
     document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
-    setExportMessage("整組 Word 已產生，共 " + entries.length + " 個施工項目，照片 " + photoTotal + " 張，成功嵌入 " + embedded + " 張" + (failed ? "，另有 " + failed + " 張未能嵌入" : "") + "。", failed ? "" : "success");
+    setExportMessage("Word 施工報告已產生：工程資料與施工明細 " + entries.length + " 項，照片 " + photoRefs.length + " 張，每頁最多四張；成功嵌入 " + embedded + " 張" + (failed ? "，另有 " + failed + " 張未能嵌入" : "") + "。", failed ? "" : "success");
   } catch (error) {
     console.error("整組 Word 匯出失敗", error);
     setExportMessage("整組 Word 匯出失敗：" + (error.message || error) + "。原始施工紀錄未受影響。", "error");
