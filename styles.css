@@ -18,3 +18,12 @@
 
 /* 同一天、同一施工場所的施工項目群組顯示 */
 .record-group-item{padding:10px 0 2px}.record-group-item h4{font-size:15px;line-height:1.45;margin:0 0 6px}.record-group-divider{border-top:1px solid var(--line);margin:10px 0}.record-group-card>.record-top{padding-bottom:10px;border-bottom:1px solid var(--line)}.record-group-export-actions{padding-top:4px}.record-group-item .record-actions button{font-size:13px;padding:9px 10px}
+
+.photo-upload-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.photo-upload-card{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;min-width:0}
+.photo-upload-card.before{border-top:4px solid #c58b32}
+.photo-upload-card.after{border-top:4px solid #2e8b62}
+.photo-upload-card h4{margin:0 0 9px;font-size:14px;color:var(--green-dark)}
+.photo-upload-button{display:flex;align-items:center;justify-content:center;min-height:44px;padding:10px;border:1px dashed #9bb9aa;border-radius:10px;background:var(--mint);color:var(--green-dark);font-weight:800;text-align:center;cursor:pointer}
+.photo-upload-button input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+@media(max-width:520px){.photo-upload-grid{grid-template-columns:1fr}}
