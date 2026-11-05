@@ -123,7 +123,8 @@ function refreshWorkItemTitles() {
 function addWorkItem(values = {}) {
   const template = $("workItemTemplate");
   const card = template.content.firstElementChild.cloneNode(true);
-  card._selectedPhotoFiles = [];
+  card._selectedBeforePhotoFiles = [];
+  card._selectedAfterPhotoFiles = [];
   card._existingPhotoPaths = Array.isArray(values.photo_paths) ? [...values.photo_paths] : [];
   const equipmentSelect = getItemField(card, "equipmentName");
   equipmentSelect.innerHTML = equipmentCatalog.map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`).join("");
@@ -138,7 +139,11 @@ function addWorkItem(values = {}) {
   getItemField(card, "pointName").value = values.point_name || "";
   getItemField(card, "notes").value = values.notes || "";
   $("workItemsContainer").appendChild(card);
-  if (card._existingPhotoPaths.length) renderExistingPhotos(card._existingPhotoPaths, getItemField(card, "existingPhotos"));
+  if (card._existingPhotoPaths.length) {
+    renderExistingPhotos(card._existingPhotoPaths.filter(path => getPhotoCategory(path) === "before"), getItemField(card, "existingBeforePhotos"), "施工前");
+    renderExistingPhotos(card._existingPhotoPaths.filter(path => getPhotoCategory(path) === "after"), getItemField(card, "existingAfterPhotos"), "施工後");
+    renderExistingPhotos(card._existingPhotoPaths.filter(path => getPhotoCategory(path) === "legacy"), getItemField(card, "existingLegacyPhotos"), "舊照片（尚未分類）");
+  }
   refreshWorkItemTitles();
   return card;
 }
@@ -592,10 +597,19 @@ function safeFileName(name) {
   const cleaned = String(name || "photo").normalize("NFKC").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-90);
   return cleaned || "photo";
 }
-function renderLocalPhotoPreview(card) {
-  const preview = getItemField(card, "photoPreview");
+function getPhotoCategory(path) {
+  const parts = String(path || "").split("/");
+  if (parts.includes("before")) return "before";
+  if (parts.includes("after")) return "after";
+  return "legacy";
+}
+function renderLocalPhotoPreview(card, category) {
+  const isBefore = category === "before";
+  const preview = getItemField(card, isBefore ? "photoPreviewBefore" : "photoPreviewAfter");
+  const filesKey = isBefore ? "_selectedBeforePhotoFiles" : "_selectedAfterPhotoFiles";
+  const files = card[filesKey] || [];
   preview.innerHTML = "";
-  card._selectedPhotoFiles.forEach((file, index) => {
+  files.forEach((file, index) => {
     const url = URL.createObjectURL(file), item = document.createElement("div");
     item.className = "photo-item";
     item.innerHTML = '<img alt="待上傳施工照片"><button class="photo-remove" type="button" aria-label="移除照片">×</button><div class="photo-caption"></div>';
@@ -603,33 +617,33 @@ function renderLocalPhotoPreview(card) {
     item.querySelector(".photo-caption").textContent = file.name;
     item.querySelector("button").addEventListener("click", () => {
       URL.revokeObjectURL(url);
-      card._selectedPhotoFiles.splice(index, 1);
-      renderLocalPhotoPreview(card);
+      card[filesKey].splice(index, 1);
+      renderLocalPhotoPreview(card, category);
     });
     preview.appendChild(item);
   });
 }
-async function renderExistingPhotos(paths, container) {
+async function renderExistingPhotos(paths, container, categoryLabel) {
   container.innerHTML = "";
   if (!paths?.length || !supabaseClient) return;
   const heading = document.createElement("div");
-  heading.className = "muted small"; heading.textContent = "已儲存的施工照片"; container.appendChild(heading);
+  heading.className = "muted small"; heading.textContent = "已儲存的" + categoryLabel + "照片"; container.appendChild(heading);
   for (const path of paths) {
     const { data, error } = await supabaseClient.storage.from(PHOTO_BUCKET).createSignedUrl(path, 604800);
     if (error || !data?.signedUrl) continue;
     const wrap = document.createElement("div"); wrap.className = "photo-item";
     const link = document.createElement("a"); link.href = data.signedUrl; link.target = "_blank"; link.rel = "noopener noreferrer";
-    const img = document.createElement("img"); img.src = data.signedUrl; img.alt = "施工照片"; link.appendChild(img); wrap.appendChild(link);
-    const caption = document.createElement("div"); caption.className = "photo-caption"; caption.textContent = "已上傳"; wrap.appendChild(caption);
+    const img = document.createElement("img"); img.src = data.signedUrl; img.alt = categoryLabel + "施工照片"; link.appendChild(img); wrap.appendChild(link);
+    const caption = document.createElement("div"); caption.className = "photo-caption"; caption.textContent = categoryLabel; wrap.appendChild(caption);
     container.appendChild(wrap);
   }
 }
-async function uploadSelectedPhotos(entryId, files) {
+async function uploadSelectedPhotos(entryId, files, category) {
   const uploaded = [];
   for (const file of files) {
     if (!file.type.startsWith("image/")) throw new Error(`「${file.name}」不是圖片檔。`);
     if (file.size > MAX_PHOTO_BYTES) throw new Error(`「${file.name}」超過 8 MB，請先縮小照片。`);
-    const path = `${currentUser.id}/${entryId}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
+    const path = `${currentUser.id}/${entryId}/${category}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
     const { error } = await supabaseClient.storage.from(PHOTO_BUCKET).upload(path, file, { cacheControl: "3600", upsert: false, contentType: file.type });
     if (error) throw new Error(`照片上傳失敗（${file.name}）：${error.message}`);
     uploaded.push(path);
@@ -733,12 +747,14 @@ async function saveEntry(event) {
     let photoWarnings = [];
     for (let i = 0; i < savedRows.length; i++) {
       const card = cards[i], id = savedRows[i].id;
-      const newFiles = card._selectedPhotoFiles || [];
-      if (newFiles.length) {
+      const beforeFiles = card._selectedBeforePhotoFiles || [];
+      const afterFiles = card._selectedAfterPhotoFiles || [];
+      if (beforeFiles.length || afterFiles.length) {
         try {
-          setMessage("entryMessage", `施工項目 ${i + 1}/${savedRows.length} 已儲存，正在上傳照片…`);
-          const uploaded = await uploadSelectedPhotos(id, newFiles);
-          const paths = [...(editingId ? card._existingPhotoPaths || [] : []), ...uploaded];
+          setMessage("entryMessage", `施工項目 ${i + 1}/${savedRows.length} 已儲存，正在上傳施工前後照片…`);
+          const beforeUploaded = await uploadSelectedPhotos(id, beforeFiles, "before");
+          const afterUploaded = await uploadSelectedPhotos(id, afterFiles, "after");
+          const paths = [...(editingId ? card._existingPhotoPaths || [] : []), ...beforeUploaded, ...afterUploaded];
           const { error } = await supabaseClient.from("work_entries").update({ photo_paths: paths }).eq("id", id);
           if (error) throw new Error(error.message);
         } catch (photoError) {
@@ -1396,12 +1412,14 @@ function wireEvents() {
     if (!card) return;
     const field = event.target.dataset.field;
     if (field === "equipmentName") updateSpecOptions(card);
-    if (field === "photoFiles") {
+    if (field === "beforePhotoFiles" || field === "afterPhotoFiles") {
       const files = [...(event.target.files || [])];
       const invalid = files.find(file => !file.type.startsWith("image/") || file.size > MAX_PHOTO_BYTES);
       if (invalid) { alert(`照片「${invalid.name}」格式不支援或超過 8 MB。請選擇圖片且每張不超過 8 MB。`); event.target.value = ""; return; }
-      card._selectedPhotoFiles = [...(card._selectedPhotoFiles || []), ...files];
-      event.target.value = ""; renderLocalPhotoPreview(card);
+      const category = field === "beforePhotoFiles" ? "before" : "after";
+      const filesKey = category === "before" ? "_selectedBeforePhotoFiles" : "_selectedAfterPhotoFiles";
+      card[filesKey] = [...(card[filesKey] || []), ...files];
+      event.target.value = ""; renderLocalPhotoPreview(card, category);
     }
   });
   $("workItemsContainer").addEventListener("click", event => {
