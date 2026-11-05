@@ -62,7 +62,6 @@ let equipmentCatalog = [];
 let cachedEntries = [];
 let editingId = null;
 let existingPhotoPaths = [];
-let selectedPhotoFiles = [];
 const PHOTO_BUCKET = "work-photos";
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
@@ -1482,7 +1481,6 @@ function wireEvents() {
     const btn = event.target.closest(".remove-work-item-btn");
     if (!btn) return;
     const card = btn.closest(".work-item-card");
-    (card._selectedPhotoFiles || []).forEach(file => void file);
     card.remove(); refreshWorkItemTitles();
   });
   $("cancelEditBtn").addEventListener("click", resetForm);
